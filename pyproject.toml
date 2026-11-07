@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uscm-agent"
+version = "0.1.0"
+description = "Placement-decision agent for microservice / multi-module systems: scatter-regime guardrail (R1'), narrowing-first advice (R2'), local Phi budgets, anomaly marking (R3'), and two-layer calibration, from the USCM-CC change-cost model."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "The uscm-agent authors" }]
+keywords = [
+  "technical-debt", "software-complexity", "modularity", "placement",
+  "scatter", "microservices", "decision-support", "empirical-software-engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/wangyun/uscm-agent"  # update after publishing
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+test = ["pytest>=7"]
+
+[project.scripts]
+uscm = "uscm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+uscm = ["priors/*.json", "py.typed"]

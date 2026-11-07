@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+
+# uscm workspaces (demo output, never commit state)
+.uscm/
+demo/_work/
+
+# OS
+.DS_Store

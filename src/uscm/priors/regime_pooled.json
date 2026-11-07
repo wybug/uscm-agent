@@ -1,0 +1,25 @@
+{
+  "model": "placement_regime_logit",
+  "equation": "logit P(scatter) = b0 + b1*log(nMR) + b2*KA + b3*GA",
+  "variables": {
+    "nMR": "number of merged changes touching the feature",
+    "KA": "number of distinct authors on the feature",
+    "GA": "author concentration (normalized entropy of author shares; 1 = single author)",
+    "scatter": {
+      "default": "feature's source landings span >= 3 modules (N1 >= 3)",
+      "front": "feature touches >= 2 distinct pages (layered crossing page->api->comp is normative, not scatter)"
+    }
+  },
+  "coef": { "intercept": -1.01, "log_nMR": 0.93, "KA": -0.01, "GA": -0.61 },
+  "coef_se": { "intercept": null, "log_nMR": 0.07, "KA": 0.10, "GA": 0.16 },
+  "provenance": {
+    "training": "19 repositories, 3,010 feature units (internal business systems and elite OSS)",
+    "cv_auc_median": 0.623,
+    "transfer_auc_mean": 0.634,
+    "out_of_sample": "held-out complete microservice system (74 repositories, 2,882 feature units): frozen-coefficient transfer AUC median 0.586 vs local refit 0.592; Java business repos 0.60-0.85, front-end repos ~0.51 (local recalibration required before enabling thresholds)",
+    "guardrail_replay": "26 repositories, 1,125 features, per-merge replay with pre-event information only, tau=0.38: 164 flags in 10 months; flagged features later heavily scattered (N1>=6) 0.81 vs unflagged 0.43 (lift 1.88; Phi top-tercile lift 1.64) - correlational evidence",
+    "paper_ref": "USCM-CC paper: Sections 3.10 (decision view, R1'-R3'), 9.4 item five (vi)-(vii)"
+  },
+  "tau_prior_default": 0.35,
+  "boundary": "Directions, rankings, probabilities and budget alarms only. No absolute cost prediction; no feature-level defect prediction (tested null); all thresholds require monthly local recalibration."
+}

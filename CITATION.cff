@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If this agent supports your work, please cite both the artifact and the paper."
+type: software
+title: uscm-agent
+version: 0.1.0
+authors:
+  - name: The uscm-agent authors
+repository-code: "https://github.com/wangyun/uscm-agent"
+abstract: >-
+  Placement-decision agent for microservice / multi-module business systems,
+  implementing the USCM-CC change-cost model's decision view: the pooled
+  placement-regime law (cold-start prior), the R1' anti-scatter guardrail,
+  R2' narrowing-first advice, local Phi quantile budgets, R3' anomaly marking,
+  and monthly two-layer calibration with three self-checks.
+keywords:
+  - technical debt
+  - software complexity
+  - modular placement
+  - microservices
+  - decision support
+license: MIT
