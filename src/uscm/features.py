@@ -39,9 +39,18 @@ def feature_key(subject: str, compiled=None) -> str | None:
     return None
 
 
-def list_merges(repo_path, since: str | None = None) -> list[dict]:
-    """All merge commits, oldest first. Each: {sha, date, subject}."""
-    args = ["log", "--merges", "--date=iso-strict", "--format=%H%x09%ad%x09%s"]
+def list_merges(repo_path, since: str | None = None,
+                mainline: bool = True) -> list[dict]:
+    """Merge commits, oldest first. Each: {sha, date, subject}.
+
+    ``mainline=True`` (default) walks the first-parent chain only: the unit
+    of change is a merge *onto the mainline* (one merged request), which also
+    ignores nested merges inside feature branches.
+    """
+    args = ["log", "--merges"]
+    if mainline:
+        args.append("--first-parent")
+    args += ["--date=iso-strict", "--format=%H%x09%ad%x09%s"]
     if since:
         args += ["--since", since]
     p = git(repo_path, *args)
@@ -55,7 +64,8 @@ def list_merges(repo_path, since: str | None = None) -> list[dict]:
     return rows
 
 
-def merges_after(repo_path, head: str, since: str | None = None) -> list[dict]:
+def merges_after(repo_path, head: str, since: str | None = None,
+                 mainline: bool = True) -> list[dict]:
     """Merges reachable from HEAD or FETCH_HEAD but not from ``head``.
 
     Union of both refs so a bare ``git fetch`` (no local pull) is still seen;
@@ -63,8 +73,11 @@ def merges_after(repo_path, head: str, since: str | None = None) -> list[dict]:
     """
     seen: dict[str, dict] = {}
     for ref in ("HEAD", "FETCH_HEAD"):
-        args = ["log", "--merges", "--date=iso-strict",
-                "--format=%H%x09%ad%x09%s", f"{head}..{ref}"]
+        args = ["log", "--merges"]
+        if mainline:
+            args.append("--first-parent")
+        args += ["--date=iso-strict", "--format=%H%x09%ad%x09%s",
+                 f"{head}..{ref}"]
         if since:
             args += ["--since", since]
         q = git(repo_path, *args)

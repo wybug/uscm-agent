@@ -101,9 +101,10 @@ def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str
 
 # -------------------------------------------------------------- full pass --
 
-def collect_repo(repo: str, path, since: str | None) -> tuple[list[dict], dict]:
+def collect_repo(repo: str, path, since: str | None,
+                 mainline: bool = True) -> tuple[list[dict], dict]:
     """Merges (oldest first, with files/author loaded) + detected scheme."""
-    merges = list_merges(path, since)
+    merges = list_merges(path, since, mainline=mainline)
     all_files: list[str] = []
     for m in merges:
         m["files"] = merge_files(path, m["sha"])
@@ -123,10 +124,11 @@ def init_replay(ws, cfg: dict, repo_args: list[str] | None,
         raise SystemExit("no repositories found: pass --repos PATH... or set "
                          "repos = [...] in uscm.toml")
     since = since_arg or cfg.get("since")
+    mainline = cfg.get("mainline", True)
     st = st_mod.new_state(ws, cfg, repos)
     timeline = []
     for name, path in repos.items():
-        merges, scheme = collect_repo(name, path, since)
+        merges, scheme = collect_repo(name, path, since, mainline=mainline)
         st["repos"][name]["scheme"] = scheme
         for m in merges:
             timeline.append((name, m))
@@ -147,6 +149,7 @@ def watch(ws, fetch: bool = False) -> dict:
         raise SystemExit("no workspace state: run `uscm init` first")
     calib = st_mod.active_calibration(st)
     cfg_since = (st["config"] or {}).get("since")
+    mainline = (st["config"] or {}).get("mainline", True)
     new_flags = []
     merges_seen = 0
     for name, rec in st["repos"].items():
@@ -157,7 +160,7 @@ def watch(ws, fetch: bool = False) -> dict:
         if fetch:
             git(path, "fetch", "--all", "--quiet")
         proc = set(st["processed"].get(name, []))
-        for m in merges_after(path, head, cfg_since):
+        for m in merges_after(path, head, cfg_since, mainline=mainline):
             if m["sha"] in proc:
                 continue
             files = merge_files(path, m["sha"])

@@ -93,8 +93,11 @@ against the current table (intended for merges not yet folded in).
 - **Feature-key dialects** are config (`uscm.toml` `[[feature]]`), defaults:
   `--story=N` / `story/N`, JIRA-like `[A-Z]+-\d+`, `TAPD N`. Merges without
   a key update statistics but produce no feature-level verdicts.
-- **Merges only.** Direct-push commits (no second parent) are invisible by
-  design — the model's unit of change is the merged request.
+- **Mainline merges only** (default; config `mainline`). The unit of change
+  is a first-parent merge onto the mainline — one merged request. Nested
+  merges inside feature branches and direct pushes are invisible by design.
+  Squash-merge workflows (no merge commits) are not covered by this
+  instrument; detect them by a near-empty `--merges` log before deploying.
 
 ## Anonymization
 

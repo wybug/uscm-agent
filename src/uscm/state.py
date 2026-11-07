@@ -8,9 +8,10 @@ A *workspace* is the current directory; everything lives under ``.uscm/``:
 
 Optional ``uscm.toml`` alongside the workspace root:
 
-    since = "2024-01-01"
-    tau   = 0.35
-    repos = ["path/to/repo", "glob*/pattern"]
+    since    = "2024-01-01"
+    tau      = 0.35
+    mainline = true            # count first-parent mainline merges only
+    repos    = ["path/to/repo", "glob*/pattern"]
 
     [[feature]]
     regex = "--story=(\\d+)"
@@ -36,7 +37,7 @@ DEFAULT_TAU_PRIOR = 0.35
 # ---------------------------------------------------------------- config ---
 
 def _default_config() -> dict:
-    return {"since": None, "tau": None, "repos": [],
+    return {"since": None, "tau": None, "repos": [], "mainline": True,
             "feature_patterns": None}
 
 
@@ -52,6 +53,7 @@ def load_config(ws: Path) -> dict:
         raise SystemExit("uscm.toml found but tomllib unavailable (need Python >= 3.11)")
     cfg["since"] = data.get("since")
     cfg["tau"] = data.get("tau")
+    cfg["mainline"] = data.get("mainline", True)
     cfg["repos"] = data.get("repos", [])
     feats = data.get("feature", [])
     if feats:
@@ -98,6 +100,7 @@ def new_state(ws: Path, cfg: dict, repos: dict[str, Path]) -> dict:
         "version": STATE_VERSION,
         "workspace": str(ws),
         "config": {"since": cfg.get("since"), "tau": cfg.get("tau"),
+                   "mainline": cfg.get("mainline", True),
                    "feature_patterns": cfg.get("feature_patterns")},
         "repos": {name: {"path": str(p), "scheme": None, "head": None}
                   for name, p in repos.items()},
