@@ -159,7 +159,8 @@ def generate(out_dir: str, seed: int = 7, n_repos: int = 8,
                 if r < 0.35:
                     target_units.append(("platform-common", rng.choice(hub["units"])))
                 elif r < 0.85:
-                    others = [b for b in java_backends if b != home]
+                    others = ([b for b in java_backends if b != home]
+                              + [g for g in ("gateway", "jobs") if g in repos])
                     if others:
                         other = rng.choice(others)
                         target_units.append((other, rng.choice(repos[other]["units"])))
