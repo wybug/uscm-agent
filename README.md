@@ -151,6 +151,7 @@ stay inside (R2′).
 | Cold transfer (pooled) | leave-one-repo-out AUC 0.634 | same corpus |
 | Out-of-sample system | 74 repos / 2,882 units: frozen-coef AUC 0.586 ≈ local refit 0.592; Java 0.60–0.85, front-end ~0.51 | held-out microservice system |
 | R1′ replay (decision validity) | τ=0.38, 164 flags / 10 months; flagged → heavily scattered (N₁≥6) 0.81 vs 0.43 (**lift 1.88**); Φ top-tercile lift 1.64 | per-merge replay, pre-event info only — *correlational* |
+| Out-of-sample DDD-layered monorepo | 402 mainline merges / 138 features; module-level label degenerate (94%) → business-package units; local law log nMR **+0.69** (direction replicates); replay precision 0.692 vs 0.371 (**lift 1.87**) | [validation case](docs/validation-case.md) |
 | Φ universal scale law | rejected (R² median 0.09) → replaced by local quantile budgets | model v2 |
 
 **Boundary declaration** (ships with every deployment): this model provides
@@ -171,6 +172,7 @@ src/uscm/advise.py      R2' narrowing, Phi budget, R3' anomaly
 src/uscm/report.py      monthly markdown report
 src/uscm/synth.py       deterministic synthetic-system generator (demo/tests/CI)
 src/uscm/mcp.py         MCP server for coding agents
+docs/validation-case.md    anonymized out-of-sample validation record
 priors/regime_pooled.json   frozen pooled coefficients + provenance
 ```
 
