@@ -27,13 +27,16 @@ def _st(ws: Path):
 
 def serve() -> None:
     try:
-        from mcp.server.fastmcp import FastMCP
+        try:
+            from mcp.server.mcpserver import MCPServer as Server  # mcp >= 2
+        except ImportError:
+            from mcp.server.fastmcp import FastMCP as Server       # mcp 1.x
     except ImportError:
         raise SystemExit("the 'mcp' package is not installed; "
                          "pip install 'uscm-agent[mcp]'")
 
     ws = Path.cwd()
-    mcp = FastMCP("uscm-agent")
+    mcp = Server("uscm-agent")
 
     @mcp.tool()
     def uscm_status() -> str:

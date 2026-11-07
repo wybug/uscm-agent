@@ -102,7 +102,7 @@ def _merge(repo: Path, key: str, num: int, when: datetime, author: str,
     _git(repo, "commit", "-q", "-m", f"wip {key}", env=env)
     _git(repo, "checkout", "-q", "main", env=env)
     _git(repo, "merge", "--no-ff", "-q", branch, "-m",
-         f"Merge {key} into main from feature/{key} (--story={num})",
+         f"Merge {key} into main from feature/{key} (--story={num:06d})",
          env=env)
     _git(repo, "branch", "-q", "-D", branch, env=env)
 
@@ -158,9 +158,11 @@ def generate(out_dir: str, seed: int = 7, n_repos: int = 8,
                 r = rng.random()
                 if r < 0.35:
                     target_units.append(("platform-common", rng.choice(hub["units"])))
-                elif r < 0.85 and java_backends:
-                    other = rng.choice([b for b in java_backends if b != home])
-                    target_units.append((other, rng.choice(repos[other]["units"])))
+                elif r < 0.85:
+                    others = [b for b in java_backends if b != home]
+                    if others:
+                        other = rng.choice(others)
+                        target_units.append((other, rng.choice(repos[other]["units"])))
                 elif front:
                     target_units.append(("portal-web", rng.choice(front["units"])))
             rng.shuffle(target_units)

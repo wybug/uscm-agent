@@ -117,7 +117,6 @@ def collect_repo(repo: str, path, since: str | None) -> tuple[list[dict], dict]:
 def init_replay(ws, cfg: dict, repo_args: list[str] | None,
                 since_arg: str | None):
     """Build workspace state from scratch: detect schemes, replay history."""
-    from pathlib import Path
     patterns = repo_args if repo_args else cfg.get("repos") or []
     repos = st_mod.resolve_repos(patterns)
     if not repos:
@@ -157,14 +156,14 @@ def watch(ws, fetch: bool = False) -> dict:
             continue
         if fetch:
             git(path, "fetch", "--all", "--quiet")
-        got = merges_after(path, head, cfg_since)
-        got.sort(key=lambda m: (m["date"], m["sha"]))
-        for m in got:
-            if m["sha"] in set(st["processed"].get(name, [])):
+        proc = set(st["processed"].get(name, []))
+        for m in merges_after(path, head, cfg_since):
+            if m["sha"] in proc:
                 continue
             files = merge_files(path, m["sha"])
             author = merge_author(path, m["sha"])
             v = process_merge(st, calib, name, m, files, author, replay=False)
+            proc.add(m["sha"])
             merges_seen += 1
             if v["verdict"] == "FLAG":
                 new_flags.append(st["flags"][-1])
