@@ -10,7 +10,7 @@ code↔theory map). The statistical core is deterministic, auditable, and
 reproducible; it is exposed twice — as a CLI for humans and CI, and as an MCP
 server for AI coding agents.
 
-![CI](https://github.com/wangyun/uscm-agent/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/wybug/uscm-agent/actions/workflows/ci.yml/badge.svg)
 
 ## The idea in six lines
 

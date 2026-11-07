@@ -16,7 +16,7 @@ keywords = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/wangyun/uscm-agent"  # update after publishing
+Homepage = "https://github.com/wybug/uscm-agent"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.2"]

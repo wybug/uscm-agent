@@ -5,11 +5,11 @@ from uscm.modules import (apply_unit_style, detect_scheme, front_module_of,
 def test_pkg_unit_style_ddd_layers():
     """DDD-layered monorepo: modules are layers, units are business packages."""
     files = [
-        "recei-tech-domain/src/main/java/com/x/recei/tech/domain/bill/A.java",
-        "recei-tech-domain/src/main/java/com/x/recei/tech/domain/dto/B.java",
-        "recei-tech-application/src/main/java/com/x/recei/tech/application/bill/C.java",
-        "recei-tech-application/src/main/java/com/x/recei/tech/application/credit/D.java",
-        "recei-tech-adapter/src/main/java/com/x/recei/tech/adapter/http/adjust/E.java",
+        "billing-domain/src/main/java/com/x/acme/domain/bill/A.java",
+        "billing-domain/src/main/java/com/x/acme/domain/dto/B.java",
+        "billing-application/src/main/java/com/x/acme/application/bill/C.java",
+        "billing-application/src/main/java/com/x/acme/application/credit/D.java",
+        "billing-adapter/src/main/java/com/x/acme/adapter/http/adjust/E.java",
     ]
     s = apply_unit_style(detect_scheme(files), files, style="pkg")
     assert unit_of(s, files[0]) == "bill"

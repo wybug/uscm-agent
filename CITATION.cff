@@ -5,7 +5,7 @@ title: uscm-agent
 version: 0.1.0
 authors:
   - name: The uscm-agent authors
-repository-code: "https://github.com/wangyun/uscm-agent"
+repository-code: "https://github.com/wybug/uscm-agent"
 abstract: >-
   Placement-decision agent for microservice / multi-module business systems,
   implementing the USCM-CC change-cost model's decision view: the pooled
