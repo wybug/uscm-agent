@@ -56,21 +56,26 @@ def list_merges(repo_path, since: str | None = None) -> list[dict]:
 
 
 def merges_after(repo_path, head: str, since: str | None = None) -> list[dict]:
-    """Merges reachable from HEAD but not from ``head``, oldest first."""
-    p = git(repo_path, "merge-base", "--is-ancestor", head, "HEAD")
-    ref = "HEAD" if p.returncode == 0 else "FETCH_HEAD"
-    args = ["log", "--merges", "--date=iso-strict",
-            "--format=%H%x09%ad%x09%s", f"{head}..{ref}"]
-    if since:
-        args += ["--since", since]
-    q = git(repo_path, *args)
-    rows = []
-    for line in q.stdout.splitlines():
-        parts = line.split("\t", 2)
-        if len(parts) == 3:
-            rows.append({"sha": parts[0], "date": parts[1], "subject": parts[2]})
-    rows.reverse()
-    return rows
+    """Merges reachable from HEAD or FETCH_HEAD but not from ``head``.
+
+    Union of both refs so a bare ``git fetch`` (no local pull) is still seen;
+    already-processed merges are filtered by the caller via its registry.
+    """
+    seen: dict[str, dict] = {}
+    for ref in ("HEAD", "FETCH_HEAD"):
+        args = ["log", "--merges", "--date=iso-strict",
+                "--format=%H%x09%ad%x09%s", f"{head}..{ref}"]
+        if since:
+            args += ["--since", since]
+        q = git(repo_path, *args)
+        if q.returncode != 0:
+            continue
+        for line in q.stdout.splitlines():
+            parts = line.split("\t", 2)
+            if len(parts) == 3:
+                seen.setdefault(parts[0], {"sha": parts[0], "date": parts[1],
+                                           "subject": parts[2]})
+    return sorted(seen.values(), key=lambda m: (m["date"], m["sha"]))
 
 
 def merge_files(repo_path, sha: str) -> list[str]:
