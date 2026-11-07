@@ -136,17 +136,39 @@ def self_checks(st: dict, rows: list[dict]) -> dict:
             "alarm_precision": precision}
 
 
+def _degeneracy_warnings(rows: list[dict], unit_style: str) -> list[str]:
+    """Label-degeneracy check: a scatter base rate near 1 means the chosen
+    placement unit is crossed normatively (e.g. modules are architecture
+    layers), and the label carries no information."""
+    out = []
+    if rows:
+        base = float(np.mean([r["scatter"] for r in rows]))
+        if base >= 0.9 and unit_style != "pkg":
+            out.append(
+                f"scatter label degenerate (base rate {base:.2f} >= 0.90): "
+                f"units look like normative structure (architecture layers?); "
+                f"consider unit_style = 'pkg' (business-package units)")
+        elif base <= 0.05:
+            out.append(f"scatter base rate {base:.2f}: almost no positives - "
+                       f"guardrail will never fire; check unit granularity")
+    return out
+
+
 def calibrate(ws, min_units: int = MIN_UNITS) -> dict:
     st = st_mod.load_state(ws)
     if st is None:
         raise SystemExit("no workspace state: run `uscm init` first")
     rows = gather_rows(st)
+    unit_style = (st.get("config") or {}).get("unit_style", "module")
+    warnings = _degeneracy_warnings(rows, unit_style)
     if len(rows) < min_units:
         calib = st_mod.active_calibration(st)
         result = {"mode": "prior", "coef": calib["coef"], "tau": calib["tau"],
                   "tau_source": "prior-placeholder", "n_units": len(rows),
                   "note": f"only {len(rows)} feature units (< {min_units}): "
                           f"keeping pooled prior; thresholds are placeholders"}
+        if warnings:
+            result["warnings"] = warnings
         st["calibration"] = {**result, "phi_bands": phi_band_table(rows),
                              "self_checks": self_checks(st, rows),
                              "fitted_at": dt.date.today().isoformat()}
@@ -164,6 +186,7 @@ def calibrate(ws, min_units: int = MIN_UNITS) -> dict:
                              "n_units": len(rows),
                              "note": f"class imbalance (pos={npos}, neg={nneg}): "
                                      f"keeping pooled prior",
+                             "warnings": warnings,
                              "phi_bands": phi_band_table(rows),
                              "self_checks": self_checks(st, rows),
                              "fitted_at": dt.date.today().isoformat()}
@@ -180,6 +203,8 @@ def calibrate(ws, min_units: int = MIN_UNITS) -> dict:
               "tau": round(float(y.mean()), 3), "tau_source": "local-base-rate",
               "n_units": len(rows), "base_rates": {"pos": npos, "neg": nneg},
               "cv_auc": _cv_auc(rows)}
+    if warnings:
+        result["warnings"] = warnings
     st["calibration"] = {**result, "phi_bands": phi_band_table(rows),
                          "self_checks": self_checks(st, rows),
                          "fitted_at": dt.date.today().isoformat()}

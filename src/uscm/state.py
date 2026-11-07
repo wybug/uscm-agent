@@ -8,10 +8,12 @@ A *workspace* is the current directory; everything lives under ``.uscm/``:
 
 Optional ``uscm.toml`` alongside the workspace root:
 
-    since    = "2024-01-01"
-    tau      = 0.35
-    mainline = true            # count first-parent mainline merges only
-    repos    = ["path/to/repo", "glob*/pattern"]
+    since      = "2024-01-01"
+    tau        = 0.35
+    mainline   = true            # count first-parent mainline merges only
+    unit_style = "module"        # "module" | "pkg" (business-package units for
+                                 # DDD-layered monorepos)
+    repos      = ["path/to/repo", "glob*/pattern"]
 
     [[feature]]
     regex = "--story=(\\d+)"
@@ -38,6 +40,7 @@ DEFAULT_TAU_PRIOR = 0.35
 
 def _default_config() -> dict:
     return {"since": None, "tau": None, "repos": [], "mainline": True,
+            "unit_style": "module", "skip_segments": None,
             "feature_patterns": None}
 
 
@@ -54,6 +57,8 @@ def load_config(ws: Path) -> dict:
     cfg["since"] = data.get("since")
     cfg["tau"] = data.get("tau")
     cfg["mainline"] = data.get("mainline", True)
+    cfg["unit_style"] = data.get("unit_style", "module")
+    cfg["skip_segments"] = data.get("skip_segments")
     cfg["repos"] = data.get("repos", [])
     feats = data.get("feature", [])
     if feats:

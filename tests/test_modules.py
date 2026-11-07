@@ -1,5 +1,23 @@
-from uscm.modules import (detect_scheme, front_module_of, is_source,
-                          is_test_module, unit_of, units_of)
+from uscm.modules import (apply_unit_style, detect_scheme, front_module_of,
+                          is_source, is_test_module, unit_of, units_of)
+
+
+def test_pkg_unit_style_ddd_layers():
+    """DDD-layered monorepo: modules are layers, units are business packages."""
+    files = [
+        "recei-tech-domain/src/main/java/com/x/recei/tech/domain/bill/A.java",
+        "recei-tech-domain/src/main/java/com/x/recei/tech/domain/dto/B.java",
+        "recei-tech-application/src/main/java/com/x/recei/tech/application/bill/C.java",
+        "recei-tech-application/src/main/java/com/x/recei/tech/application/credit/D.java",
+        "recei-tech-adapter/src/main/java/com/x/recei/tech/adapter/http/adjust/E.java",
+    ]
+    s = apply_unit_style(detect_scheme(files), files, style="pkg")
+    assert unit_of(s, files[0]) == "bill"
+    assert unit_of(s, files[1]) is None          # technical stereotype only
+    assert unit_of(s, files[2]) == "bill"        # same capability, other layer
+    assert unit_of(s, files[3]) == "credit"
+    assert unit_of(s, files[4]) == "adjust"      # http stepped over
+    assert units_of(s, files) == {"bill", "credit", "adjust"}
 
 
 def test_detect_multi():

@@ -20,6 +20,77 @@ FRONT_MARKS = ("src/views/", "src/pages/", "/pages/", "src/components/",
                "/components/", "src/api/", "/apis/", "src/store/",
                "/stores/", "/subpackages/")
 
+# Technical stereotype packages: crossing them is normative layering, not
+# scatter (the DDD-layered analogue of the front-end page->api->comp rule).
+STEREOTYPES = {
+    "dto", "vo", "bo", "po", "entity", "model", "models", "enums", "enum",
+    "constants", "config", "configuration", "utils", "util", "exception",
+    "exceptions", "handler", "interceptor", "aspect", "filter", "converter",
+    "convert", "assembler", "impl", "service", "services", "controller",
+    "http", "api", "facade", "rpc", "remote", "feign", "gateway", "client",
+    "mapper", "dao", "repository", "repo", "condition", "query", "manager",
+    "task", "job", "listener", "consumer", "producer", "aop", "annotation",
+    "support", "helper", "base", "integration", "wrapper", "type", "types",
+    "cache", "log", "monitor", "test", "constant", "result", "response",
+    "request", "context", "event", "events", "schedule", "servlet",
+}
+
+
+def apply_unit_style(scheme: dict, files: list[str], style: str = "module",
+                     skip: list[str] | None = None) -> dict:
+    """Attach a placement-unit style to a detected scheme.
+
+    ``module`` (default): unit = Maven module / directory prefix.
+    ``pkg``: unit = first *business* package segment - the package path is
+    stripped of the repo-wide common prefix and the module-name segment,
+    technical stereotype packages (``skip``, default STEREOTYPES) are
+    stepped over, and the first remaining segment is the unit. Files that
+    never reach a business segment land in no unit (normative structure).
+
+    Use ``pkg`` for DDD-layered monorepos where modules are architecture
+    layers (adapter/application/domain/infrastructure): crossing layers is
+    normative, scatter means spanning >= 3 business capabilities.
+    """
+    if style != "pkg" or scheme["type"] not in ("multi", "single"):
+        return scheme
+    pkgs = []
+    for f in files:
+        if f.endswith(".java") and "/src/main/java/" in f:
+            pkgs.append(f.split("/src/main/java/", 1)[1].split("/")[:-1])
+        elif f.endswith(".java") and f.startswith("src/main/java/"):
+            pkgs.append(f.split("src/main/java/", 1)[1].split("/")[:-1])
+    common = 0
+    for segs in zip(*pkgs):
+        if len(set(segs)) == 1:
+            common += 1
+        else:
+            break
+    scheme = dict(scheme)
+    scheme["unit_style"] = "pkg"
+    scheme["prefix_len"] = common
+    scheme["skip"] = sorted(set(skip) if skip is not None else STEREOTYPES)
+    return scheme
+
+
+def _pkg_unit_of(path: str, scheme: dict) -> str | None:
+    if "/src/main/java/" in path:
+        pkg = path.split("/src/main/java/", 1)[1].split("/")[:-1]
+        modseg = path.split("/src/main/java/")[0]
+    elif path.startswith("src/main/java/"):
+        pkg = path.split("src/main/java/", 1)[1].split("/")[:-1]
+        modseg = ""
+    else:
+        return None
+    rest = pkg[scheme["prefix_len"]:]
+    suffix = modseg.rsplit("-", 1)[-1].lower() if modseg else ""
+    if rest and rest[0].lower() == suffix:
+        rest = rest[1:]
+    skip = set(scheme["skip"])
+    for seg in rest:
+        if seg.lower() not in skip:
+            return seg
+    return None
+
 
 def detect_scheme(files: list[str]) -> dict:
     """Auto-detect a repository's module scheme from its changed-file list."""
@@ -104,8 +175,12 @@ def unit_of(scheme: dict, path: str) -> str | None:
     """Placement unit of one file, or None if the file lands in no unit.
 
     ``front``: only pages are units (scatter = touching >= 2 pages);
-    api/comp/store layer crossings are normative. Other schemes: L1 module.
+    api/comp/store layer crossings are normative.
+    ``pkg`` style (scheme["unit_style"]): business package segment.
+    Other schemes: L1 module.
     """
+    if scheme.get("unit_style") == "pkg":
+        return _pkg_unit_of(path, scheme)
     t = scheme["type"]
     if t == "front":
         m = front_module_of(path)

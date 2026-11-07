@@ -54,6 +54,18 @@ Feature-level scatter label = ≥2 distinct pages. Because the pooled prior was
 not estimated with this label, front-end repos under prior calibration carry
 a warning and require local recalibration before thresholds are trusted.
 
+**DDD-layered monorepos (`unit_style = "pkg"`).** When Maven modules are
+architecture layers (adapter/application/domain/infrastructure), crossing
+them is normative and the module-level scatter label degenerates (base rate
+→ 1; `uscm calibrate` warns at ≥ 0.90). The same re-operationalization as
+front-end applies: units become *business package segments* — the package
+path stripped of the repo-wide prefix and the module-name segment, stepping
+over technical stereotype packages (dto/service/mapper/http/…, configurable
+via `skip_segments`); a file that never reaches a business segment lands in
+no unit. Scatter then means spanning ≥ 3 business capabilities. Files whose
+every segment is a stereotype (e.g. a pure `domain/dto/...` change) count as
+no unit rather than fake scatter.
+
 ## Two-layer calibration (§1.4) and self-checks
 
 `calibrate.py`. Layer 1 — the pooled prior

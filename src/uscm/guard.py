@@ -101,8 +101,9 @@ def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str
 
 # -------------------------------------------------------------- full pass --
 
-def collect_repo(repo: str, path, since: str | None,
-                 mainline: bool = True) -> tuple[list[dict], dict]:
+def collect_repo(repo: str, path, since: str | None, mainline: bool = True,
+                 unit_style: str = "module",
+                 skip_segments=None) -> tuple[list[dict], dict]:
     """Merges (oldest first, with files/author loaded) + detected scheme."""
     merges = list_merges(path, since, mainline=mainline)
     all_files: list[str] = []
@@ -110,8 +111,9 @@ def collect_repo(repo: str, path, since: str | None,
         m["files"] = merge_files(path, m["sha"])
         m["author"] = merge_author(path, m["sha"])
         all_files.extend(m["files"])
-    from .modules import detect_scheme
+    from .modules import apply_unit_style, detect_scheme
     scheme = detect_scheme(all_files) if all_files else {"type": "flat2"}
+    scheme = apply_unit_style(scheme, all_files, unit_style, skip_segments)
     return merges, scheme
 
 
@@ -128,7 +130,9 @@ def init_replay(ws, cfg: dict, repo_args: list[str] | None,
     st = st_mod.new_state(ws, cfg, repos)
     timeline = []
     for name, path in repos.items():
-        merges, scheme = collect_repo(name, path, since, mainline=mainline)
+        merges, scheme = collect_repo(name, path, since, mainline=mainline,
+                                      unit_style=cfg.get("unit_style", "module"),
+                                      skip_segments=cfg.get("skip_segments"))
         st["repos"][name]["scheme"] = scheme
         for m in merges:
             timeline.append((name, m))
