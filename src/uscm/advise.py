@@ -44,7 +44,8 @@ def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
     phi = len(f["units"])
     band = band_of(nmr)
     bands = (st.get("calibration") or {}).get("phi_bands") or {}
-    budget = bands.get(band, {}).get("p90")
+    band_entry = bands.get(band, {})
+    budget = band_entry.get("p90")
     budget_alarm = budget is not None and phi >= budget
     units_ranked = sorted(f["units"].items(), key=lambda kv: -kv[1])
     above = p_now > calib["tau"]
@@ -59,6 +60,9 @@ def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
         "P_scatter_next_merge": round(p_next, 3),
         "tau": calib["tau"], "above_tau": above,
         "phi_band": band, "phi_band_p90": budget,
+        "phi_band_shrunk": band_entry.get("shrunk", False),
+        "phi_band_n": band_entry.get("n"),
+        "phi_band_w": band_entry.get("w"),
         "phi_budget_alarm": budget_alarm,
         "r2_narrowing": (units_ranked if above else None),
         "r3_anomaly": r3_anomaly(f.get("sizes", [])),
@@ -103,12 +107,16 @@ def render_detail(rep: dict) -> str:
          f"{rep['P_scatter_next_merge']}  (tau={rep['tau']}, "
          f"above: {'yes' if rep['above_tau'] else 'no'})"]
     if rep["phi_band_p90"] is not None:
+        note = ""
+        if rep.get("phi_band_shrunk"):
+            note = (f" (shrunk w={rep.get('phi_band_w')}, "
+                    f"n={rep.get('phi_band_n')} - low confidence)")
         L.append(f"  Phi budget: band nMR {rep['phi_band']} P90="
-                 f"{rep['phi_band_p90']} -> "
+                 f"{rep['phi_band_p90']}{note} -> "
                  f"{'ALARM (Phi crossed)' if rep['phi_budget_alarm'] else 'within budget'}")
     else:
         L.append("  Phi budget: no local budget for this band yet "
-                 "(needs >= 10 units in band)")
+                 "(needs >= 3 units in band)")
     if rep["r2_narrowing"]:
         cand = ", ".join(f"{u} (x{n})" for u, n in rep["r2_narrowing"][:6])
         L.append(f"  R2' narrowing: keep changes inside existing units -> {cand}")

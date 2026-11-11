@@ -49,12 +49,19 @@ def test_r3_down_anomaly():
     assert b["anomaly_down"] is False
 
 
-def test_advise_renders_r4_events():
+def test_advise_renders_shrunk_budget_and_r4():
     st, calib = _state()
+    st["features"]["S1"]["nMR"] = 10
+    st["features"]["S1"]["units"] = {f"u{i}": 1 for i in range(12)}
+    st["calibration"] = {
+        "mode": "local", "tau": 0.7, "coef": prior_coef(),
+        "phi_bands": {"9+": {"p90": 13.2, "n": 3, "shrunk": True, "w": 0.17}}}
     st["flags"].append({"kind": "r4", "date": "2025-06-01", "repo": "r",
                         "sha": "abc", "story": "S1", "gap_days": 13,
                         "files": 3, "overlap": 3, "subject": "rework"})
     rep = advise_feature(st, calib, "S1")
+    assert rep["phi_band"] == "9+" and rep["phi_band_shrunk"] is True
     assert rep["r4_events"] and rep["r4_events"][0]["gap_days"] == 13
     txt = render_detail(rep)
+    assert "shrunk w=0.17" in txt and "low confidence" in txt
     assert "R4' rework: 1 resurrection patch(es)" in txt

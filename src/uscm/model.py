@@ -102,17 +102,49 @@ def band_of(nmr: int) -> str:
             return f"{lo}" if lo == hi else (f"{lo}-{hi}" if hi else f"{lo}+")
 
 
-def phi_band_table(rows: list[dict], q: float = 0.9, min_n: int = 10) -> dict:
+def shrunk_p90(local_values: list[float], prior_p90: float | None,
+               k: int = 15) -> tuple[float | None, float]:
+    """Small-sample P90 via shrinkage toward a prior (change-cost eval).
+
+    threshold = w * P90(local) + (1 - w) * prior,  w = n / (n + k).
+    Returns (threshold, w); (None, 0.0) when no local data. With n >= k the
+    local quantile stands on its own (w = 1). Keeps early-history / thin-band
+    budgets from thrashing between 1 and 7 while true signals still cross.
+    """
+    n = len(local_values)
+    if n == 0:
+        return None, 0.0
+    q = float(np.percentile(local_values, 90))
+    if prior_p90 is None or n >= k:
+        return q, 1.0
+    w = n / (n + k)
+    return w * q + (1 - w) * float(prior_p90), w
+
+
+def phi_band_table(rows: list[dict], q: float = 0.9, min_n: int = 3,
+                   shrink_k: int = 15) -> dict:
     """Local Phi budget: per-nMR-band P90 of Phi.
 
-    ``rows``: dicts with keys nMR, Phi. Bands with < min_n observations get
-    None (budget alarm stays off for that band) - Phi has no universal law,
-    budgets are strictly local quantities.
+    ``rows``: dicts with keys nMR, Phi. Bands need >= min_n observations to
+    emit anything; bands with min_n <= n < shrink_k emit a *shrunk* P90
+    blended toward the all-features P90 prior (flagged ``shrunk: true`` with
+    weight ``w``), so thin bands (e.g. the 9+ band with 3 stories) get a
+    usable low-confidence budget instead of none. Phi has no universal law -
+    budgets remain strictly local quantities, the prior is only a variance
+    reducer.
     """
     by_band: dict[str, list[float]] = {}
     for r in rows:
         by_band.setdefault(band_of(int(r["nMR"])), []).append(float(r["Phi"]))
-    return {b: {"p90": (round(float(np.percentile(v, q * 100)), 1)
-                        if len(v) >= min_n else None),
-                "n": len(v)}
-            for b, v in sorted(by_band.items())}
+    prior = (float(np.percentile([v for vs in by_band.values() for v in vs],
+                                 q * 100))
+             if sum(len(v) for v in by_band.values()) >= min_n else None)
+    out: dict[str, dict] = {}
+    for b, v in sorted(by_band.items()):
+        if len(v) < min_n:
+            out[b] = {"p90": None, "n": len(v)}
+            continue
+        p90, w = shrunk_p90(v, prior, k=shrink_k)
+        out[b] = {"p90": round(p90, 1), "n": len(v),
+                  "shrunk": len(v) < shrink_k, "w": round(w, 2)}
+    return out

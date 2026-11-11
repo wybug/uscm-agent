@@ -65,3 +65,40 @@ def test_bands_and_phi_table():
 
 def test_feats_layout():
     assert feats(4, 2, 0.5) == [1.0, np.log(4), 2.0, 0.5]
+
+
+# --------------------------------------------------------- shrunk P90 ----
+import pytest  # noqa: E402
+
+from uscm.model import phi_band_table, shrunk_p90  # noqa: E402
+
+
+def test_shrunk_p90_small_n_blends_prior():
+    val, w = shrunk_p90([8.0, 9.0, 10.0], prior_p90=7.0, k=15)
+    assert w == pytest.approx(3 / 18)
+    assert val == pytest.approx(w * 9.8 + (1 - w) * 7.0)   # q90(3 vals)=9.8
+
+
+def test_shrunk_p90_large_n_is_raw():
+    vals = [float(x) for x in range(1, 21)]
+    val, w = shrunk_p90(vals, prior_p90=99.0, k=15)
+    assert w == 1.0 and val == float(np.percentile(vals, 90))
+
+
+def test_shrunk_p90_edge_cases():
+    assert shrunk_p90([], prior_p90=7.0) == (None, 0.0)
+    val, w = shrunk_p90([5.0, 6.0], prior_p90=None, k=15)  # no prior: raw
+    assert w == 1.0 and val == 5.9
+
+
+def test_phi_band_table_shrinks_thin_bands():
+    rows = [{"nMR": 1, "Phi": 2}] * 25 + [{"nMR": 9, "Phi": 10},
+                                          {"nMR": 9, "Phi": 12},
+                                          {"nMR": 9, "Phi": 14}]
+    t = phi_band_table(rows)
+    assert t["1"]["shrunk"] is False            # n=25 >= 15: local stands
+    assert t["1"]["p90"] == 2.0
+    assert t["9+"]["shrunk"] is True and t["9+"]["p90"] is not None
+    assert t["9+"]["w"] == pytest.approx(3 / 18, abs=0.01)
+    t2 = phi_band_table([{"nMR": 9, "Phi": 10}, {"nMR": 9, "Phi": 12}])
+    assert t2["9+"]["p90"] is None              # below emit minimum (3)

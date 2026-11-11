@@ -184,7 +184,7 @@ processes new merges per repository (batch order within a repo by date), the
 same approximation as the validated dry-run; `check` evaluates read-only
 against the current table (intended for merges not yet folded in).
 
-## R4' rework guardrail and tail-shrink marker (v0.5)
+## R4' rework guardrail and shrunk Phi budgets (v0.5)
 
 Two extensions validated on the recei-tech full-window evaluation
 (2026-11-11), see `IMPROVEMENTS.md`-style pilots in the evaluation workspace:
@@ -203,6 +203,15 @@ Two extensions validated on the recei-tech full-window evaluation
   and 108 OSS PR merges produce zero flags. `advise` renders
   `R4' rework: N resurrection patch(es)`; R4' flags are excluded from the
   R1' alarm-precision self-check (different outcome being measured).
+- **Shrunk Phi budgets for thin bands**. Bands with `3 <= n < 15`
+  observations used to emit no budget (the 9+ band vanished). They now emit
+  `threshold = w·P90(local) + (1-w)·P90(all-features)`, `w = n/(n+15)`,
+  flagged `shrunk: true` with weight and `n` (rendered as *low confidence*).
+  Demo on recei-tech: all four founding-era true signals keep their verdict
+  while thin-band thresholds stop thrashing; the 9+ band gains budget 11.5
+  (w=0.17, n=3). Also new: **R3'-down** (last 3 sizes all <= baseline/2)
+  marks tail-shrink delivery fragmentation — advisory marker, no tier
+  change.
 - **nMR under merge-as-delivery**. An A/B pilot replacing `log(nMR)` with
   delivery-burst count degraded CV AUC (0.531 vs 0.665 on recei-tech);
   landing frequency stays the feature, only wording changes ("landing
