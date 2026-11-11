@@ -16,6 +16,8 @@ measurement pipeline; see THEORY.md.
 """
 from __future__ import annotations
 
+import re
+
 FRONT_MARKS = ("src/views/", "src/pages/", "/pages/", "src/components/",
                "/components/", "src/api/", "/apis/", "src/store/",
                "/stores/", "/subpackages/")
@@ -50,7 +52,18 @@ def apply_unit_style(scheme: dict, files: list[str], style: str = "module",
     Use ``pkg`` for DDD-layered monorepos where modules are architecture
     layers (adapter/application/domain/infrastructure): crossing layers is
     normative, scatter means spanning >= 3 business capabilities.
+
+    ``camel``: unit = the first CamelCase word of the file stem (class-name
+    prefix). Use for single-module layered services whose packages are purely
+    technical (service/controller/dao/...) and the business capability lives
+    in the class name (ShopService, DeviceMapper, RiskInfoEnum -> Shop,
+    Device, Risk). Files whose stem starts lowercase or with an acronym
+    (application.yml, OSSKey...) land in no unit (technical/config files).
     """
+    if style == "camel":
+        scheme = dict(scheme)
+        scheme["unit_style"] = "camel"
+        return scheme
     if style != "pkg" or scheme["type"] not in ("multi", "single"):
         return scheme
     pkgs = []
@@ -179,6 +192,8 @@ def unit_of(scheme: dict, path: str) -> str | None:
     ``pkg`` style (scheme["unit_style"]): business package segment.
     Other schemes: L1 module.
     """
+    if scheme.get("unit_style") == "camel":
+        return _camel_unit_of(path)
     if scheme.get("unit_style") == "pkg":
         return _pkg_unit_of(path, scheme)
     t = scheme["type"]
@@ -208,6 +223,15 @@ def unit_of(scheme: dict, path: str) -> str | None:
     return tail[0] if tail else "root"
 
 
+def _camel_unit_of(path: str) -> str | None:
+    """First CamelCase word of the file stem, for class-prefix-named repos."""
+    if not path.endswith(".java"):
+        return None
+    stem = _stem(path.rsplit("/", 1)[-1])
+    m = re.match(r"^([A-Z][a-z0-9]+)", stem)
+    return m.group(1) if m else None
+
+
 def units_of(scheme: dict, files: list[str]) -> set[str]:
     """Placement units touched by a change (source files, non-test)."""
     out = set()
@@ -218,6 +242,11 @@ def units_of(scheme: dict, files: list[str]) -> set[str]:
         if u is not None:
             out.add(u)
     return out
+
+
+def source_files(files: list[str]) -> list[str]:
+    """Source, non-test files of a change (the placement landings)."""
+    return [f for f in files if is_source(f) and not is_test_module(f)]
 
 
 def unit_l2(scheme: dict, path: str) -> str | None:

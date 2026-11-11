@@ -33,6 +33,7 @@
 | **R2′ 先收窄** | 越过 τ 的功能：按落点次数排序其既有单元——把变更留在里面，高风险期不扩大选项 | `uscm advise --story KEY` |
 | **Φ 预算** | 功能落点数 Φ 越过其 nMR 分带的本地 P90 → 拆分/搬迁候选。Φ 无跨系统上界，预算是纯本地量 | `uscm advise` |
 | **R3′ 局部异常** | 功能最近 ≥3 次变更规模持续高于其自身基线 → 供人工复核（统计告警，不是债的证明） | `uscm advise` |
+| **评审分档 T0–T3** | 每个合并依同一组事前信号落一档评审决策：**T3** 先分解（越过规模门——本地 P90 只收紧、不放松配置上限；或带键合并一次把足迹扩张到 ≥3 单元）· **T2** 深评+放置讨论（R1′ FLAG 或前瞻 Φ 超预算，须附放置理由）· **T1** 标准评审（多单元同步与无键合并附逐单元评审焦点）· **T0** 机器+抽样（只管放置维度，不判正确性） | `uscm check`（review 块）· `uscm reviewstats` |
 | **两层标定** | 每月本地重拟合、τ=本地体制基率、Φ 带更新，并跑三项自检（方向/份额漂移/报警精度） | `uscm calibrate` |
 
 单合并裁决阶梯：`FLAG` / `PASS` / `OK`（跳过：无功能键 · 无源码落点 · 功能
@@ -48,8 +49,8 @@ bash demo/demo.sh
 
 demo 生成确定性的合成微服务系统（8 仓、60 功能；散落按体制律本身种植），
 然后跑完整闭环：init 回放 → calibrate（本地重拟合恢复种植方向
-`log_nMR>0, GA<0`，CI 中有断言）→ advise 排行 → check 出 FLAG 与评论文本 →
-watch 增量 → report 月度报告。
+`log_nMR>0, GA<0`，CI 中有断言）→ advise 排行 → check 出 FLAG、评论文本与
+评审档位（T0–T3）→ watch 增量 → report 月度报告。
 
 ## 用在真实系统上
 
@@ -66,10 +67,28 @@ EOF
 uscm init && uscm calibrate
 ```
 
+手写 uscm.toml 之前，先对每个仓跑只读的**分支工作流预分析**——让配置来自
+证据而非猜测：
+
+```bash
+uscm probe ~/code/my-repo          # 分支工作流、story 方言、单元风格
+uscm probe ~/code/my-repo --toml   # 直接产 uscm.toml 脚手架
+uscm probe ~/code/my-repo --json   # 机器可读，含 staging 的 graft 清单
+```
+
+`probe` 会给每个合并分类（落线 / 线间滚动 / 评审迭代 / 同步 / 特性内部），
+发现落线集合（直连 vs release 列车流、快进合流时代），从源分支数字形状
+提议 story 键正则，对 squash 型工作流（键覆盖率近零）与多线继承（逐线
+worktree 必重复计数）给出告警，并预检单元风格退化（module 单元全是架构
+层 → `pkg`；业务编码在类名前缀 → `camel`）。对二级流它会推荐 staging：
+`--shared` 克隆、把列出的嵌套合并 `git replace --graft` 摘除、以
+`mainline = false` 运行。
+
 日常运营：`uscm watch [--fetch]`（巡检新合并）；CI 对每个 MR 跑
-`uscm check 仓 sha --json` 解析 `verdict`（FLAG 时评论文本可直接回贴）；
-每月 `uscm calibrate && uscm report`；随时 `uscm advise --top 10` 看散落
-风险榜。
+`uscm check 仓 sha --json` 解析 `verdict` 与 `review.tier`（FLAG/T2 要求
+放置理由，T3 要求沿放置单元分解，评论文本可直接回贴）；每月
+`uscm calibrate && uscm report`，随后 `uscm reviewstats` 看档位分布、T0
+占比与 T2/T3 富集度；随时 `uscm advise --top 10` 看散落风险榜。
 
 模块方案自动识别：Maven 多模块（multi）/ 单树 Java 包（single）/ Go-TS
 目录前缀（flat2）/ 前端仓（front）。前端仓只有**不同页面**才算放置单元

@@ -40,6 +40,7 @@ server for AI coding agents.
 | **R2′ narrow first** | For features above τ: rank their existing units — keep changes inside them; do not widen Ω when scatter risk is high. | `uscm advise --story KEY` |
 | **Φ budget** | A feature's landing count Φ crossing its nMR-band's local P90 is a split/relocate candidate. No cross-system Φ bound exists — budgets are strictly local. | `uscm advise` |
 | **R3′ local anomaly** | A feature whose last ≥3 merges each run materially above its own size baseline gets marked for human review (a statistical marker, not proof of debt). | `uscm advise` |
+| **Review tiers T0–T3** | Every merge draws a review tier from the same pre-event signals: **T3** split-first (oversized — local P90 tightens, never loosens, the configured ceiling — or a keyed merge expanding the footprint across ≥3 units) · **T2** deep + placement discussion (R1′ FLAG or prospective Φ over budget; placement rationale required) · **T1** standard (multi-unit syncs and unattributed merges get per-unit review focus) · **T0** auto + sampling (placement dimension only, never certifies correctness). | `uscm check` (review block) · `uscm reviewstats` |
 | **Two-layer calibration** | Monthly local refit of the law, τ = local regime base rate, Φ bands recomputed, plus three self-checks (direction / regime drift / alarm precision). | `uscm calibrate` |
 
 Verdict ladder for a merge: `FLAG` / `PASS` / `OK` (skip: no feature key · no
@@ -71,13 +72,17 @@ mode: local   units: 60   tau: 0.283 (local-base-rate)
 coef: intercept=-1.5  log_nMR=1.5  KA=-0.36  GA=-1.41     # planted: +0.9 / -0.6
 local fit 5-fold CV AUC: 0.819
 
-== 4. check: single-merge verdict (read-only)
-FLAG: new-unit-above-tau  S000016  svc-order#867913b6
+== 4. check: single-merge verdict + review tier (read-only)
+FLAG: new-unit-above-tau  S000016  svc-order#4f679cb9
   P(scatter)=0.701  tau=0.283  nMR_prev=12  GA=0.21  new_units=['core']
   [R1' anti-scatter guardrail] This merge introduces new placement unit(s)
   [core] for feature S000016, whose P(scatter)=70% exceeds the system base
   rate tau=28% ... State the placement rationale, or place into an existing
   unit / narrow the options first (R2').
+  review: T2  triggers: new-unit-above-tau  units_in_mr=1  files=1
+  [review T2 | deep + placement] R1': P(scatter)=70% exceeds tau=28%. Attach
+  a placement rationale (candidate units, why this one, sync plan with
+  existing landings); senior review owns the alignment layer.
 ```
 
 The calibration recovering the planted directions (`log_nMR > 0`, `GA < 0`)
@@ -100,13 +105,35 @@ uscm init                # replay history with frozen prior (cold start)
 uscm calibrate           # local law, tau, Phi bands, self-checks
 ```
 
+Before writing `uscm.toml` by hand, run the read-only workflow pre-analysis
+on each repo — it derives the config from evidence instead of guesswork:
+
+```bash
+uscm probe ~/code/my-repo          # branch workflow, story dialect, unit style
+uscm probe ~/code/my-repo --toml   # emits a uscm.toml scaffold
+uscm probe ~/code/my-repo --json   # machine output incl. the staging graft list
+```
+
+`probe` classifies every merge (landing / line-rollup / review-iteration /
+sync / feature-internal), discovers the landing lines (direct vs
+release-train flows, fast-forward eras), proposes the story-key regex from
+source-branch digit shapes, warns on squash workflows (near-zero keyed
+coverage) and multi-line inheritance (per-line worktrees double-count), and
+pre-checks unit-style degeneracy (`module` units that are just architecture
+layers → `pkg`; class-prefix services → `camel`). For two-level flows it
+recommends staging: clone `--shared`, graft out the listed nested merges
+(`git replace --graft`), run with `mainline = false`.
+
 Then operate:
 
 - **daily / hourly**: `uscm watch [--fetch]` — judges new merges, appends flags;
 - **in CI on every MR**: `uscm check REPO SHA --json` — parse `verdict`
-  (`FLAG` → block or request rationale; the comment text is ready to post);
+  (`FLAG` → block or request rationale) and `review.tier`
+  (T3 → ask for decomposition along placement units; T2 → request the
+  placement rationale; comment text is ready to post);
 - **monthly**: `uscm calibrate && uscm report` — refit, self-check, archive a
-  markdown report under `.uscm/reports/`;
+  markdown report under `.uscm/reports/`; then `uscm reviewstats` — tier
+  distribution, T0 share (attention saved), T2/T3 outcome lift;
 - **anytime**: `uscm advise --top 10` — the current scatter-risk leaderboard.
 
 Module schemes are auto-detected per repo: Maven multi-module (`multi`),
@@ -169,6 +196,7 @@ src/uscm/features.py    git merge history -> feature units
 src/uscm/guard.py       R1': replay / watch / check
 src/uscm/calibrate.py   two-layer calibration + three self-checks
 src/uscm/advise.py      R2' narrowing, Phi budget, R3' anomaly
+src/uscm/review.py      review tiers T0-T3 + replay-log stats
 src/uscm/report.py      monthly markdown report
 src/uscm/synth.py       deterministic synthetic-system generator (demo/tests/CI)
 src/uscm/mcp.py         MCP server for coding agents

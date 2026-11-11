@@ -39,6 +39,16 @@ def test_full_loop(tmp_path, monkeypatch):
     for f in replay_flags:                    # every flag is a true R1' hit
         assert f["new_units"] and f["P"] > f["tau"] and f["replay"] is True
 
+    # every replayed merge drew a review tier; counts append after judging
+    log = st["reviews"]["log"]
+    assert len(log) == s["merges"]
+    assert all(e["tier"] in ("T0", "T1", "T2", "T3") for e in log)
+    assert any(e["tier"] == "T2" for e in log)          # flags -> deep review
+    from uscm.review import reviewstats
+    rs = reviewstats(st)
+    assert rs["merges"] == len(log)
+    assert sum(rs["distribution"].values()) == len(log)
+
     # ---- calibrate: local law recovers the planted directions ----
     res = calibrate(ws)
     assert res["mode"] == "local"
@@ -53,6 +63,7 @@ def test_full_loop(tmp_path, monkeypatch):
     old = replay_flags[0]
     v = check(ws, old["repo"], old["sha"])
     assert v["verdict"] == "PASS" and v["reason"] == "no-new-unit"
+    assert v["review"]["tier"] in ("T0", "T1", "T2", "T3")
 
     # ---- live check + watch: continue top-risk features with a new unit ----
     top = rank_features(st, st_mod.active_calibration(st), top=5)
@@ -81,8 +92,9 @@ def test_full_loop(tmp_path, monkeypatch):
     rep = advise_feature(st, st_mod.active_calibration(st), top[0]["story"])
     assert rep["story"] == top[0]["story"]
     assert "phi_band_p90" in rep and "r3_anomaly" in rep
+    assert rep["review_next"]["introduce_new_unit"]["tier"] in ("T1", "T2")
     txt = render_detail(rep)
-    assert "Phi budget" in txt and "R2'" in txt
+    assert "Phi budget" in txt and "R2'" in txt and "review next merge" in txt
 
     r = monthly_report(ws)
     assert r["flags"] >= 1

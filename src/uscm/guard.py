@@ -16,11 +16,8 @@ from . import state as st_mod
 from .features import (compile_patterns, feature_key, git, head_of, list_merges,
                        merge_author, merge_files, merges_after)
 from .model import ga_of, p_scatter
-from .modules import is_source, is_test_module, units_of
-
-
-def source_files(files: list[str]) -> list[str]:
-    return [f for f in files if is_source(f) and not is_test_module(f)]
+from .modules import source_files, units_of
+from . import review as rv_mod
 
 
 def evaluate_merge(st: dict, calib: dict, repo: str, merge: dict,
@@ -86,8 +83,11 @@ def apply_merge(st: dict, repo: str, merge: dict, key: str | None,
 
 def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str],
                   author: str | None, replay: bool = False) -> dict:
-    """Evaluate -> maybe flag -> apply. The unit of all replay/watch loops."""
+    """Evaluate -> review tier -> maybe flag -> apply + record."""
     v = evaluate_merge(st, calib, repo, merge, files)
+    dec = rv_mod.review_decision(st, calib, v, files,
+                                 st["repos"][repo]["scheme"])
+    v["review"] = dec
     if v["verdict"] == "FLAG":
         st["flags"].append({"date": v["date"], "repo": repo, "sha": merge["sha"],
                             "story": v["story"], "P": v["P"], "tau": v["tau"],
@@ -96,6 +96,7 @@ def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str
                             "subject": v["subject"], "replay": replay})
         st["stats"]["flags"] = len(st["flags"])
     apply_merge(st, repo, merge, v.get("story"), files, author)
+    rv_mod.record(st, dec, v)
     return v
 
 
@@ -201,7 +202,10 @@ def check(ws, repo_arg: str, sha: str) -> dict:
     merge = {"sha": sha, "date": parts[0], "subject": parts[1].strip()}
     files = merge_files(path, sha)
     calib = st_mod.active_calibration(st)
-    return evaluate_merge(st, calib, name, merge, files)
+    v = evaluate_merge(st, calib, name, merge, files)
+    v["review"] = rv_mod.review_decision(st, calib, v, files,
+                                         st["repos"][name]["scheme"])
+    return v
 
 
 def summarize(st: dict, repos) -> dict:

@@ -4,8 +4,9 @@ Optional extra: ``pip install 'uscm-agent[mcp]'``. Tools:
 
 - ``uscm_status``       workspace summary (repos, features, flags, calibration)
 - ``uscm_calibration``  active coefficients, tau, Phi bands, self-checks
-- ``uscm_check``        single-merge R1' verdict (repo name + merge sha)
-- ``uscm_advise``       per-feature report or top-K scatter-risk ranking
+- ``uscm_check``        single-merge R1' verdict + review tier (repo + sha)
+- ``uscm_advise``       per-feature report (incl. next-merge review tier)
+                        or top-K scatter-risk ranking
 
 The server runs in the workspace directory it was started from; all outputs
 are deterministic JSON strings produced by the same core the CLI uses.
@@ -59,20 +60,27 @@ def serve() -> None:
 
     @mcp.tool()
     def uscm_check(repo: str, sha: str) -> str:
-        """R1' verdict for one merge (read-only; pre-event information only).
+        """R1' verdict + review tier for one merge (read-only, pre-event).
 
         Use before merging or reviewing a change: returns FLAG/PASS/OK with
-        P(scatter), tau, new placement units, and the guardrail comment text.
+        P(scatter), tau, new placement units, the guardrail comment text, and
+        a ``review`` block - tier T0-T3 (T3 split-first / T2 deep+placement /
+        T1 standard / T0 auto+sample), triggers, focus and required
+        artifacts (e.g. placement rationale for T2).
         """
         from .guard import check, comment_text
+        from .review import comment_text as review_comment
         v = check(ws, repo, sha)
         if v["verdict"] == "FLAG":
             v["comment"] = comment_text(v)
+        if v.get("review"):
+            v["review"]["comment"] = review_comment(v["review"])
         return json.dumps(v, ensure_ascii=False)
 
     @mcp.tool()
     def uscm_advise(story: str = "", top: int = 10) -> str:
-        """Per-feature decision report (story=key) or top-K scatter-risk ranking."""
+        """Per-feature decision report (story=key; includes the next-merge
+        review tier per branch) or top-K scatter-risk ranking."""
         st = _st(ws)
         calib = st_mod.active_calibration(st)
         from .advise import advise_feature, rank_features

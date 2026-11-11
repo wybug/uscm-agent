@@ -53,6 +53,60 @@ feature spans 16 business packages across 9 merges
 (customer×6, advance×4, credit×3, bill×3, statement×3, …); the largest Φ
 is 19, which trips the Φ-budget alarm in its nMR band.
 
+## Review-tier replay (v0.2, two further systems)
+
+v0.2 adds review tiers (T0 auto+sample / T1 standard / T2 deep+placement /
+T3 split-first; see THEORY.md). Replaying whole histories draws a tier for
+every merge *before* it is folded (pre-event information only; file-count
+thresholds come from merges already replayed, and the local P90 may only
+tighten — never loosen — the configured size ceiling). Three semantic rules
+were forced by this replay and are now asserted in tests: (a) the shape
+gate precedes the feature gates — a feature's first bulk drop and an
+unkeyed oversized merge are T3 material; (b) *attribution asymmetry* — a
+multi-unit merge routes to T3-decompose only when keyed (a footprint
+expansion: new units, or the feature's first drop); unkeyed multi-unit
+merges (release-line rollup remnants) and syncs of existing landings are
+atomic or unattributable, so they get per-unit review focus at T1/T2
+instead (mirroring R1′, which also demands a key before placement claims);
+(c) ladder coherence — the size ceiling stays strictly above the T0 file
+ceiling even on degenerate distributions, which is surfaced as
+`degenerate` rather than silently patched.
+
+**System A — 3 repositories, 523 merges, 168 story features** (backend +
+front-end, business-package and page units; locally calibrated: τ=0.548,
+CV AUC 0.699). Distribution: T0 4.2% · T1 79.7% · T2 0.2% · **T3 15.9%**
+(60 oversized-only · 13 both · 10 multi-unit-expansion). Features that drew
+≥1 T2/T3 merge ended heavily scattered (N1 ≥ 6 or within-repo Φ top
+tercile, nMR ≥ 2) **0.737 vs 0.391** → lift **1.885** (19 vs 23 features)
+— in line with the R1′ lineage (1.87/1.88). Sanity anchor: the feature
+behind the original Φ-budget ALARM (Φ=4 in band P90=4) is routed to T2 for
+*any* follow-up merge — via the Φ budget when staying in existing units,
+via P(next)=0.60 > τ when adding a unit.
+
+**System B — 60 repositories pooled, 15,063 merges** (multi-tier flows,
+staging grafts, prior calibration per repository). Distribution: T0 4.0% ·
+T1 76.3% · T2 0.05% · **T3 19.7%**. ≥1 T2/T3 features: 331, heavy-scatter
+rate **0.662**; rest: 256, **0.156** → pooled lift **4.23**. Reading
+caution: the multi-unit-expansion trigger is construct-coupled to the
+outcome (a merge adding units is on the causal path to high final N1), so
+the pooled lift over-states independent evidence. The cleaner
+sub-instrument — features that ever drew an *oversized* T3 (size ceiling
+alone, independent of unit counts) — separates at **0.882 vs 0.275**,
+lift **3.21** (161 vs 426 features). Under cold-start calibration T2 fires
+almost only on R1′ FLAGs (local Φ bands do not exist yet); the size and
+shape gates carry the replay.
+
+Readings: (i) tiers are *conservative* under cold start; (ii) T0's 4% share
+is the placement-dimension attention budget released to machine checks +
+sampling — small in these systems because most merges touch several files
+(> local P50); it is not a correctness verdict; (iii) a T3 share of 16–20%
+is this ecosystem's honest reading (41% of stories span ≥3 repositories;
+bundled placement expansion and oversized merges are common), not an
+instrument artifact — the attribution and sync exclusions removed the
+tautological cases (23 sync + 1,545 unattributed multi-unit merges) with
+no change in feature-level lift; (iv) all lifts are correlational with
+within-repository labels, same caveats as the R1′ lift.
+
 ## Threats to validity
 
 Single system, single repository, 75 calibration units; coefficients beyond

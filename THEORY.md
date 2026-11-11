@@ -66,6 +66,99 @@ no unit. Scatter then means spanning ≥ 3 business capabilities. Files whose
 every segment is a stereotype (e.g. a pure `domain/dto/...` change) count as
 no unit rather than fake scatter.
 
+**Class-prefix services (`unit_style = "camel"`).** Single-module layered
+services where every package is technical (`service/`, `controller/`,
+`model/`, …) and the business capability lives in the class-name prefix
+(`ShopService`, `DeviceMapper`, `RiskInfoEnum`). Module style degenerates
+(layers are the only units) and pkg style finds no business segment; units
+instead become the *first CamelCase word of the class stem* (`ShopPoint…`
+→ `Shop`). The split is deliberately coarse (first word only): compound
+prefixes (`ShopPoint` vs `ShopProfit`) merge, which under-counts rather
+than fabricates scatter. Stems starting with an acronym (`OSSKey…`) or
+lowercase (config files) land in no unit; a stem that *is* one capitalized
+word (e.g. `Application`) forms a singleton unit — rare, and visible as
+such in the unit table.
+
+## Review tiers (T0–T3)
+
+`review.py` turns the same pre-event signals into a *review decision* —
+where scarce reviewer attention should go, per merge. The ladder moves
+attention up the value hierarchy (alignment > correctness > style, the
+lowest tier automated) instead of uniformly demanding more review:
+
+- **T3 split-first** — the merge crosses the size gate, or a *keyed* merge
+  expands the footprint across ≥ `split_units` placement units (default 3)
+  in one step (new units, or the feature's first drop): decompose along
+  placement units first. Acceptance cost grows superlinearly in touched
+  modules (Proposition 13), so a longer review is not the remedy for an
+  unreviewable shape. The size gate runs for **every** merge (size is a
+  property of the merge alone — unkeyed bulk drops included); the
+  multi-unit gate demands attribution, mirroring R1′: a sync of existing
+  landings is atomic (splitting mid-flight creates silent inconsistency,
+  Proposition 9) and an unkeyed multi-unit merge (release-line rollup
+  remnants) cannot be told apart from one — both take per-unit review
+  focus at T1/T2. T3 dominates T2: shape beats placement risk.
+- **T2 deep + placement** — R1′ FLAG, or the prospective landing count
+  (φ_prev + |new units|) crossing the local band P90. Senior review owns
+  the alignment layer; a placement rationale (candidate units, choice, sync
+  plan with existing landings) is required — the PR description becomes a
+  decision record.
+- **T1 standard** — story key present, no structural trigger: correctness
+  and test evidence. Merges without a key, and a feature's first
+  (small) merge, land here with a reason — there is no feature context to
+  route on; first merges get a placement focus note (they set the
+  feature's baseline landing).
+- **T0 auto + sample** — one existing unit, no new unit, ≤ local P50 files
+  (fallback 5), no R3′ size anomaly: machine checks plus periodic sampling.
+  T0 speaks to the *placement dimension only* — it never certifies
+  correctness.
+
+Thresholds live in `[review]` (`split_units`, `split_files`,
+`auto_max_files`, `local_quantiles`). The size gate follows the paper's
+two-instrument split. Φ has no universal law, so its budget is a pure
+local P90; review size has an externally calibrated ceiling (detection
+collapses beyond ~400 lines), so `split_files` is an absolute ceiling that
+the local P90 may only *tighten* — never loosen: effective
+`split = clamp` of `min(P90, split_files)` with a `P50+1` floor (capped by
+`split_files`) that keeps the ladder coherent on degenerate low-spread
+distributions; that case is surfaced as `degenerate` in `thresholds()` /
+`reviewstats` rather than silently patched, mirroring the
+label-degeneracy warning in `calibrate`. File-count quantiles use only
+merges already replayed — each merge's count is appended after it is
+judged — so the replay stays free of lookahead. `uscm reviewstats`
+summarizes the log: tier distribution, T0 share (attention saved), the
+size gate now in force, and the outcome lift of features that drew ≥1
+T2/T3 merge vs the rest (heavy scatter = N1 ≥ 6 or Φ top tercile; same
+correlational caveat as the R1′ lift).
+
+## Workflow pre-analysis (`uscm probe`, read-only)
+
+Every construct above assumes the instrument fits the repository's branch
+workflow; `probe` measures that fit *before* init, so config is derived from
+evidence. It parses merge subjects into (source, target) pairs across five
+platform dialects (codeup `Merge #N into T from S`, GitHub PRs, GitLab
+branch merges, sync merges, plain merges), then classifies each merge
+data-driven: **landing** (story-keyed source onto a discovered landing
+line), **line_rollup** (line onto line), and three nested roles
+(**review_iteration** for `refs/changes` patchsets into keyed branches,
+**sync**, **feature_internal**). From this it derives: workflow levels
+(direct vs two-level release-train flow, mixed fast-forward eras), a story
+dialect candidate (digit-run shapes recurring in *source* branch names,
+pinned prefix, line-name contamination excluded — a target token that ever
+appears as a source carries the dialect, `release-250903` does not),
+multi-line inheritance (how many lines' first-parent chains contain each
+keyed landing — per-line worktrees double-count), squash-workflow
+non-coverage (near-zero keyed coverage), and a unit-style degeneracy
+pre-check (module units that are architecture layers by name — single-repo
+technical L1s or `business-layer` multi-module suffixes — with pkg
+pseudo-unit and camel vocabulary simulations). Output: a human report, JSON
+(`--json`, includes the exact graft list for staging), and a `uscm.toml`
+scaffold (`--toml`). Recommendation rule: `mainline=true` only when every
+keyed landing is on HEAD's own first-parent chain (nested merges are then
+invisible by design); otherwise stage a clone with the emitted nested
+merges grafted parentless (`git replace --graft`) and run `mainline=false`
+— one walk, every landing exactly once, no double counting.
+
 ## Two-layer calibration (§1.4) and self-checks
 
 `calibrate.py`. Layer 1 — the pooled prior

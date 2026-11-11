@@ -31,6 +31,10 @@ def cmd_init(a) -> None:
         print(f"  {name:24s} scheme={r['scheme']:6s} merges={r['merges']}")
     print(f"features: {s['features']}   merges replayed: {s['merges']}   "
           f"historical R1' flags: {s['flags']}")
+    if s["merges"] and s["features"] < 0.3 * s["merges"]:
+        print("hint: low feature-key coverage — run `uscm probe <repo>` to "
+              "check the branch workflow and story dialect before trusting "
+              "the replay")
     print("next: uscm calibrate   (then: uscm watch / check / advise / report)")
 
 
@@ -54,6 +58,7 @@ def cmd_calibrate(a) -> None:
 
 def cmd_check(a) -> None:
     from .guard import check, comment_text
+    from .review import comment_text as review_comment
     v = check(_ws(), a.repo, a.sha)
     if a.json:
         out = dict(v)
@@ -70,6 +75,12 @@ def cmd_check(a) -> None:
         print(f"  warning: {v['warning']}")
     if v["verdict"] == "FLAG":
         print("  " + comment_text(v, "zh" if a.zh else "en"))
+    r = v.get("review")
+    if r:
+        print(f"  review: {r['tier']}  triggers: "
+              f"{', '.join(r['triggers']) or '-'}  "
+              f"units_in_mr={r['units_in_mr']}  files={r['n_files']}")
+        print("  " + review_comment(r, "zh" if a.zh else "en"))
 
 
 def cmd_watch(a) -> None:
@@ -121,6 +132,43 @@ def cmd_report(a) -> None:
     print(f"-> {res['path']}   ({res['flags']} flags in {res['month']})")
 
 
+def cmd_reviewstats(a) -> None:
+    ws = _ws()
+    st = st_mod.load_state(ws)
+    if st is None:
+        raise SystemExit("no workspace state: run `uscm init` first")
+    from .review import reviewstats
+    res = reviewstats(st)
+    if a.json:
+        _j(res)
+        return
+    if not res.get("merges"):
+        print(res.get("note", "review log empty"))
+        return
+    d = res["distribution"]
+    n = res["merges"]
+    print(f"reviewed merges: {n}   T0 share: {res['t0_share']:.0%} "
+          "(attention saved on the placement dimension)")
+    for t in ("T0", "T1", "T2", "T3"):
+        print(f"  {t}: {d.get(t, 0):4d}  ({d.get(t, 0) / n:.1%})")
+    tr = res["features"]["triggered_t2t3"]
+    un = res["features"]["no_t2t3"]
+    print(f"features with >=1 T2/T3 merge: {tr['n']}  "
+          f"ended heavily scattered: {tr['heavy_rate']}")
+    print(f"features with T0/T1 only:      {un['n']}  "
+          f"ended heavily scattered: {un['heavy_rate']}")
+    if res.get("lift") is not None:
+        print(f"lift: {res['lift']}   (heavy = {res['heavy']}; correlational, "
+              "same caveat as the R1' lift)")
+    g = res.get("size_gate")
+    if g:
+        note = ("   WARNING: degenerate file-count distribution - the local "
+                "size budget carries no spread" if g["degenerate"] else "")
+        print(f"size gate now: split_files={g['split_files']}  "
+              f"auto_max_files={g['auto_max_files']}  "
+              f"(history {g['history']} merges){note}")
+
+
 def cmd_synth(a) -> None:
     from .synth import generate
     m = generate(a.out, seed=a.seed, n_repos=a.repos, n_features=a.features,
@@ -135,6 +183,18 @@ def cmd_synth(a) -> None:
           "`uscm init --repos '<outdir>/*' && uscm calibrate`")
 
 
+def cmd_probe(a) -> None:
+    from .probe import probe, render, toml_scaffold
+    r = probe(a.path, a.since)
+    if a.json:
+        _j(r)
+        return
+    if a.toml:
+        print(toml_scaffold(r), end="")
+        return
+    print(render(r))
+
+
 def cmd_mcp(a) -> None:
     from .mcp import serve
     serve()
@@ -147,7 +207,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="uscm",
         description="Placement-decision agent from the USCM-CC change-cost "
                     "model (R1' anti-scatter guardrail, R2' narrowing, "
-                    "Phi budgets, R3' anomaly, two-layer calibration).")
+                    "Phi budgets, R3' anomaly, review tiers T0-T3, "
+                    "two-layer calibration).")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -162,7 +223,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_calibrate)
 
-    s = sub.add_parser("check", help="single-merge R1' evaluation (read-only)")
+    s = sub.add_parser("check",
+                       help="single-merge R1' verdict + review tier (read-only)")
     s.add_argument("repo")
     s.add_argument("sha")
     s.add_argument("--zh", action="store_true", help="Chinese comment text")
@@ -184,6 +246,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--month", help="YYYY-MM (default: latest activity)")
     s.set_defaults(fn=cmd_report)
 
+    s = sub.add_parser("reviewstats",
+                       help="review-tier distribution + outcome lift "
+                            "(from the replay log)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_reviewstats)
+
     s = sub.add_parser("synth", help="generate a deterministic synthetic system")
     s.add_argument("--out", required=True)
     s.add_argument("--seed", type=int, default=7)
@@ -195,6 +263,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("mcp", help="run the MCP server (stdio) for coding agents")
     s.set_defaults(fn=cmd_mcp)
+
+    s = sub.add_parser("probe",
+                       help="pre-analysis: branch workflow, story dialect, "
+                            "unit style (read-only, run before init)")
+    s.add_argument("path", nargs="?", default=".", help="git repo path")
+    s.add_argument("--since", help="only merges since date (YYYY-MM-DD)")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--toml", action="store_true",
+                   help="print a uscm.toml scaffold instead of the report")
+    s.set_defaults(fn=cmd_probe)
     return p
 
 

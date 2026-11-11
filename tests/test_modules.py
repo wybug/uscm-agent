@@ -20,6 +20,31 @@ def test_pkg_unit_style_ddd_layers():
     assert units_of(s, files) == {"bill", "credit", "adjust"}
 
 
+def test_camel_unit_style_class_prefix_naming():
+    """Single-module layered service: packages are technical layers, the
+    business capability lives in the class-name prefix."""
+    files = [
+        "src/main/java/com/x/svc/controller/ShopController.java",
+        "src/main/java/com/x/svc/service/impl/ShopPointServiceImpl.java",
+        "src/main/java/com/x/svc/service/DeviceService.java",
+        "src/main/java/com/x/svc/common/enums/RiskInfoEnum.java",
+    ]
+    s = apply_unit_style(detect_scheme(files), files, style="camel")
+    assert unit_of(s, files[0]) == "Shop"
+    assert unit_of(s, files[1]) == "Shop"        # coarse: first word only
+    assert unit_of(s, files[2]) == "Device"
+    assert unit_of(s, files[3]) == "Risk"
+    assert units_of(s, files) == {"Shop", "Device", "Risk"}
+    # acronym-leading stems and non-Java files land in no unit
+    assert _camel_stem("OSSGroupService.java") is None
+    assert unit_of(s, "src/main/resources/application.yml") is None
+
+
+def _camel_stem(name: str):
+    from uscm.modules import _camel_unit_of
+    return _camel_unit_of(name)
+
+
 def test_detect_multi():
     files = ["core/src/main/java/com/x/core/A.java",
              "api/src/main/java/com/x/api/B.java",

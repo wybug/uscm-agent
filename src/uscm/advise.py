@@ -46,6 +46,7 @@ def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
     units_ranked = sorted(f["units"].items(), key=lambda kv: -kv[1])
     above = p_now > calib["tau"]
     flagged = sum(1 for x in st.get("flags", []) if x["story"] == key)
+    from .review import advise_review_next    # lazy: review imports r3_anomaly
     return {
         "story": key, "nMR": nmr, "Phi": phi, "KA": ka, "GA": round(ga, 3),
         "repos": sorted(f["repos"]), "units": units_ranked,
@@ -56,6 +57,7 @@ def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
         "phi_budget_alarm": budget_alarm,
         "r2_narrowing": (units_ranked if above else None),
         "r3_anomaly": r3_anomaly(f.get("sizes", [])),
+        "review_next": advise_review_next(st, calib, key),
         "guardrail_flags": flagged,
         "first": f.get("first"), "last": f.get("last"),
     }
@@ -109,6 +111,13 @@ def render_detail(rep: dict) -> str:
         L.append(f"  R3' size anomaly: baseline={a['baseline']} "
                  f"last3={a['last3']} threshold={a['threshold']} -> "
                  f"{'FLAGGED' if a['anomaly'] else 'no'}")
+    rn = rep.get("review_next")
+    if rn:
+        L.append(f"  review next merge: existing units -> "
+                 f"{rn['stay_in_existing_units']['tier']}; new unit -> "
+                 f"{rn['introduce_new_unit']['tier']} "
+                 f"(P_next={rn['P_next']}, tau={rn['tau']}, "
+                 f"phi_after={rn['introduce_new_unit']['phi_after']})")
     if rep["guardrail_flags"]:
         L.append(f"  guardrail flags on this feature: {rep['guardrail_flags']}")
     return "\n".join(L)

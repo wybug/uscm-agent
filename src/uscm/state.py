@@ -19,6 +19,12 @@ Optional ``uscm.toml`` alongside the workspace root:
     regex = "--story=(\\d+)"
     tag   = "S{0}"
 
+    [review]                     # review-tier thresholds (size gate: local P90
+    split_units     = 3          # only tightens split_files, never loosens it)
+    split_files     = 15         # absolute ceiling once >= 40 merges replayed
+    auto_max_files  = 5          # -> local P50
+    local_quantiles = true
+
 The feature table is updated only by applying merges in global date order
 (``apply_merge``); every R1' evaluation reads the table strictly *before*
 applying the merge being judged, so no evaluation ever sees future data.
@@ -41,7 +47,7 @@ DEFAULT_TAU_PRIOR = 0.35
 def _default_config() -> dict:
     return {"since": None, "tau": None, "repos": [], "mainline": True,
             "unit_style": "module", "skip_segments": None,
-            "feature_patterns": None}
+            "feature_patterns": None, "review": {}}
 
 
 def load_config(ws: Path) -> dict:
@@ -60,6 +66,7 @@ def load_config(ws: Path) -> dict:
     cfg["unit_style"] = data.get("unit_style", "module")
     cfg["skip_segments"] = data.get("skip_segments")
     cfg["repos"] = data.get("repos", [])
+    cfg["review"] = data.get("review", {})
     feats = data.get("feature", [])
     if feats:
         cfg["feature_patterns"] = [(f["regex"], f["tag"]) for f in feats]
@@ -91,7 +98,10 @@ def load_state(ws: Path) -> dict | None:
     f = state_path(ws)
     if not f.exists():
         return None
-    return json.loads(f.read_text())
+    st = json.loads(f.read_text())
+    # workspaces built before review tiers (v0.2) have no review log
+    st.setdefault("reviews", {"log": [], "file_counts": []})
+    return st
 
 
 def save_state(ws: Path, st: dict) -> None:
@@ -106,12 +116,14 @@ def new_state(ws: Path, cfg: dict, repos: dict[str, Path]) -> dict:
         "workspace": str(ws),
         "config": {"since": cfg.get("since"), "tau": cfg.get("tau"),
                    "mainline": cfg.get("mainline", True),
-                   "feature_patterns": cfg.get("feature_patterns")},
+                   "feature_patterns": cfg.get("feature_patterns"),
+                   "review": cfg.get("review") or {}},
         "repos": {name: {"path": str(p), "scheme": None, "head": None}
                   for name, p in repos.items()},
         "features": {},
         "processed": {name: [] for name in repos},
         "flags": [],
+        "reviews": {"log": [], "file_counts": []},
         "stats": {"merges": 0, "flags": 0},
         "calibration": None,
     }
