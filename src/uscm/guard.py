@@ -54,6 +54,47 @@ def evaluate_merge(st: dict, calib: dict, repo: str, merge: dict,
     return {**out, "verdict": "PASS", "reason": "new-unit-below-tau"}
 
 
+# ------------------------------------------------------------------- R4' --
+
+#: R4' rework guardrail ("resurrection patch"): a story silent for more than
+#: R4_GAP_DAYS days returns with a small landing that mostly re-touches files
+#: it already changed. Such fix-loop churn is invisible to R1' (no new units)
+#: and R3' (no size spike), yet it is the classic rework signature found in
+#: the recei-tech / power-user-b evaluations (e.g. story resumed after 13
+#: days re-touching the same three files).
+R4_GAP_DAYS = 10          # quiet days before a landing counts as "resurrection"
+R4_MAX_FILES = 5          # small patch only
+R4_MIN_OVERLAP = 2        # at least this many files already touched ...
+R4_OVERLAP_FRAC = 2 / 3   # ... and at least this fraction of the patch
+
+
+def r4_resumption(f: dict, date: str, files: list[str]) -> dict | None:
+    """R4' pre-event check for one keyed landing. Read-only on the feature.
+
+    ``f`` is the feature record as it stands *before* this landing (no
+    future data); ``files`` are the landing's source files. Returns the
+    flag payload or None. Features built before per-file tracking (no
+    ``files`` key) are silently skipped - backward compatible.
+    """
+    import datetime as dt
+
+    touched = f.get("files")
+    if not touched or f.get("nMR", 0) < 1 or not files:
+        return None
+    try:
+        gap = (dt.date.fromisoformat(date) - dt.date.fromisoformat(f["last"])).days
+    except (KeyError, ValueError):
+        return None
+    if gap <= R4_GAP_DAYS or not (1 <= len(files) <= R4_MAX_FILES):
+        return None
+    overlap = [x for x in files if x in touched]
+    if len(overlap) < max(R4_MIN_OVERLAP, R4_OVERLAP_FRAC * len(files)):
+        return None
+    return {"kind": "r4", "gap_days": gap, "files": len(files),
+            "overlap": len(overlap),
+            "re_files": sorted(set(overlap))[:3]}
+
+
 def comment_text(v: dict, lang: str = "en") -> str:
     new_units = ", ".join(v["new_units"][:4])
     if lang == "zh":
@@ -75,15 +116,16 @@ def apply_merge(st: dict, repo: str, merge: dict, key: str | None,
     if key:
         units = units_of(st["repos"][repo]["scheme"], files)
         if units:
+            src = source_files(files)
             st_mod.update_feature(st, key, repo, units, author,
-                                  len(source_files(files)), merge["date"][:10])
+                                  len(src), merge["date"][:10], files=src)
     st["processed"].setdefault(repo, []).append(merge["sha"])
     st["stats"]["merges"] += 1
 
 
 def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str],
                   author: str | None, replay: bool = False) -> dict:
-    """Evaluate -> review tier -> maybe flag -> apply + record."""
+    """Evaluate -> review tier -> maybe flag (R1' / R4') -> apply + record."""
     v = evaluate_merge(st, calib, repo, merge, files)
     dec = rv_mod.review_decision(st, calib, v, files,
                                  st["repos"][repo]["scheme"])
@@ -95,7 +137,18 @@ def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str
                             "new_units": v["new_units"][:6],
                             "subject": v["subject"], "replay": replay})
         st["stats"]["flags"] = len(st["flags"])
-    apply_merge(st, repo, merge, v.get("story"), files, author)
+    # R4' rework guardrail: judged strictly before the landing is folded in.
+    key = v.get("story")
+    if key:
+        f = st["features"].get(key)
+        r4 = r4_resumption(f, v["date"], source_files(files)) if f else None
+        if r4:
+            r4.update({"date": v["date"], "repo": repo, "sha": merge["sha"],
+                       "story": key, "subject": v["subject"], "replay": replay})
+            st["flags"].append(r4)
+            st["stats"]["flags"] = len(st["flags"])
+        v["r4"] = r4
+    apply_merge(st, repo, merge, key, files, author)
     rv_mod.record(st, dec, v)
     return v
 
@@ -170,11 +223,11 @@ def watch(ws, fetch: bool = False) -> dict:
                 continue
             files = merge_files(path, m["sha"])
             author = merge_author(path, m["sha"])
+            n_flags_before = len(st["flags"])
             v = process_merge(st, calib, name, m, files, author, replay=False)
             proc.add(m["sha"])
             merges_seen += 1
-            if v["verdict"] == "FLAG":
-                new_flags.append(st["flags"][-1])
+            new_flags.extend(st["flags"][n_flags_before:])
         st["repos"][name]["head"] = head_of(path)
     st_mod.save_state(ws, st)
     return {"new_merges": merges_seen, "new_flags": len(new_flags),

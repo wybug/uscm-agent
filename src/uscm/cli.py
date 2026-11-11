@@ -30,7 +30,7 @@ def cmd_init(a) -> None:
     for name, r in s["repos"].items():
         print(f"  {name:24s} scheme={r['scheme']:6s} merges={r['merges']}")
     print(f"features: {s['features']}   merges replayed: {s['merges']}   "
-          f"historical R1' flags: {s['flags']}")
+          f"historical guardrail flags (R1'+R4'): {s['flags']}")
     if s["merges"] and s["features"] < 0.3 * s["merges"]:
         print("hint: low feature-key coverage — run `uscm probe <repo>` to "
               "check the branch workflow and story dialect before trusting "
@@ -92,8 +92,13 @@ def cmd_watch(a) -> None:
     print(f"new merges: {res['new_merges']}   new flags: {res['new_flags']}   "
           f"(calibration: {res['calibration_mode']})")
     for f in res["flags"][-10:]:
-        print(f"  FLAG [{f['date']}] {f['repo']}#{f['sha'][:8]} P={f['P']} "
-              f"{f['story']} new={','.join(f['new_units'][:3])}")
+        if f.get("kind") == "r4":
+            print(f"  FLAG [{f['date']}] {f['repo']}#{f['sha'][:8]} R4' rework "
+                  f"{f['story']} gap={f['gap_days']}d "
+                  f"re-touch={f['overlap']}/{f['files']}")
+        else:
+            print(f"  FLAG [{f['date']}] {f['repo']}#{f['sha'][:8]} P={f['P']} "
+                  f"{f['story']} new={','.join(f['new_units'][:3])}")
 
 
 def cmd_advise(a) -> None:

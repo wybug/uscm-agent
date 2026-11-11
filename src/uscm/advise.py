@@ -24,9 +24,12 @@ def r3_anomaly(sizes: list[int]) -> dict | None:
         return None
     last3 = sizes[-3:]
     threshold = max(1.5 * baseline, baseline + 2)
+    down = max(1, baseline / 2)          # R3'-down: abnormally small tail
     return {"baseline": round(baseline, 1), "last3": last3,
             "threshold": round(threshold, 1),
-            "anomaly": all(s >= threshold for s in last3)}
+            "anomaly": all(s >= threshold for s in last3),
+            "threshold_down": round(down, 1),
+            "anomaly_down": all(s <= down for s in last3)}
 
 
 def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
@@ -46,6 +49,8 @@ def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
     units_ranked = sorted(f["units"].items(), key=lambda kv: -kv[1])
     above = p_now > calib["tau"]
     flagged = sum(1 for x in st.get("flags", []) if x["story"] == key)
+    r4_events = [x for x in st.get("flags", [])
+                 if x.get("kind") == "r4" and x["story"] == key]
     from .review import advise_review_next    # lazy: review imports r3_anomaly
     return {
         "story": key, "nMR": nmr, "Phi": phi, "KA": ka, "GA": round(ga, 3),
@@ -57,6 +62,7 @@ def advise_feature(st: dict, calib: dict, key: str) -> dict | None:
         "phi_budget_alarm": budget_alarm,
         "r2_narrowing": (units_ranked if above else None),
         "r3_anomaly": r3_anomaly(f.get("sizes", [])),
+        "r4_events": r4_events,
         "review_next": advise_review_next(st, calib, key),
         "guardrail_flags": flagged,
         "first": f.get("first"), "last": f.get("last"),
@@ -110,7 +116,14 @@ def render_detail(rep: dict) -> str:
         a = rep["r3_anomaly"]
         L.append(f"  R3' size anomaly: baseline={a['baseline']} "
                  f"last3={a['last3']} threshold={a['threshold']} -> "
-                 f"{'FLAGGED' if a['anomaly'] else 'no'}")
+                 f"{'FLAGGED' if a['anomaly'] else 'no'}"
+                 + (f"; DOWN anomaly (<= {a['threshold_down']}) -> tail-shrink"
+                    if a.get("anomaly_down") else ""))
+    if rep.get("r4_events"):
+        ev = rep["r4_events"][0]
+        L.append(f"  R4' rework: {len(rep['r4_events'])} resurrection patch(es) "
+                 f"(first {ev['date']}, gap {ev['gap_days']}d, "
+                 f"re-touch {ev['overlap']}/{ev['files']} files)")
     rn = rep.get("review_next")
     if rn:
         L.append(f"  review next merge: existing units -> "

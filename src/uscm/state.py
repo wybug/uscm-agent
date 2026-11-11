@@ -158,7 +158,7 @@ def feature_stats(st: dict, key: str) -> dict | None:
 
 
 def update_feature(st: dict, key: str, repo: str, units: set, author, n_files: int,
-                   date: str) -> None:
+                   date: str, files: list[str] | None = None) -> None:
     f = st["features"].setdefault(
         key, {"units": {}, "nMR": 0, "authors": {}, "repos": {},
               "sizes": [], "first": date, "last": date})
@@ -167,6 +167,10 @@ def update_feature(st: dict, key: str, repo: str, units: set, author, n_files: i
     f["nMR"] += 1
     f["repos"][repo] = f["repos"].get(repo, 0) + 1
     f["sizes"].append(int(n_files))
+    if files is not None:                      # per-file touch counts (R4')
+        touched = f.setdefault("files", {})
+        for x in files:
+            touched[x] = touched.get(x, 0) + 1
     if author:
         f["authors"][author] = f["authors"].get(author, 0) + 1
     if date and date < f["first"]:

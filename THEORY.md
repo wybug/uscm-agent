@@ -184,6 +184,30 @@ processes new merges per repository (batch order within a repo by date), the
 same approximation as the validated dry-run; `check` evaluates read-only
 against the current table (intended for merges not yet folded in).
 
+## R4' rework guardrail and tail-shrink marker (v0.5)
+
+Two extensions validated on the recei-tech full-window evaluation
+(2026-11-11), see `IMPROVEMENTS.md`-style pilots in the evaluation workspace:
+
+- **R4' "resurrection patch" (rework loop)**. R1' reacts only to new units
+  and R3' only to size spikes, so fix-loop churn — a story silent for days
+  returning with a small patch re-touching its own files — was invisible
+  (recei-tech / power-user-b blind spot). R4' flags a keyed landing when,
+  judged strictly pre-event: the story was quiet for `R4_GAP_DAYS` (10) or
+  more, the patch carries 1–`R4_MAX_FILES` (5) source files, and at least
+  `max(2, 2/3·|F|)` of them were already touched by the story. Features
+  built before per-file tracking (no `files` key in state) are skipped —
+  backward compatible; re-run `init` to activate. Positive control:
+  power-user-b S1063584 (silent 13 d, 3/3 files re-touched) flags exactly;
+  negative controls: recei-tech's 17 follow-up patches at 4–8 day rhythm
+  and 108 OSS PR merges produce zero flags. `advise` renders
+  `R4' rework: N resurrection patch(es)`; R4' flags are excluded from the
+  R1' alarm-precision self-check (different outcome being measured).
+- **nMR under merge-as-delivery**. An A/B pilot replacing `log(nMR)` with
+  delivery-burst count degraded CV AUC (0.531 vs 0.665 on recei-tech);
+  landing frequency stays the feature, only wording changes ("landing
+  count", "Nth landing of this branch opens a new unit").
+
 ## Known semantics decisions
 
 - **Unit names are repo-local strings, unprefixed.** A feature table merges

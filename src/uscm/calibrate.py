@@ -109,7 +109,9 @@ def self_checks(st: dict, rows: list[dict]) -> dict:
                  "n_recent": 0, "n_prior": 0}
 
     # 3. alarm precision: flagged features ending heavily scattered
-    flagged = {f["story"] for f in st.get("flags", [])}
+    #    (R1' flags only - R4' rework flags measure a different outcome)
+    flagged = {f["story"] for f in st.get("flags", [])
+               if f.get("kind", "r1") != "r4"}
     phis = sorted(r["Phi"] for r in rows)
     q67 = float(np.percentile(phis, 67)) if phis else None
 

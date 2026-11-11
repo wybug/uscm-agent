@@ -144,3 +144,72 @@ def test_init_replay_on_tiny_repo(ws, tiny_repo):
     assert s["features"] == 3 and s["merges"] == 3
     st = st_mod.load_state(ws)
     assert st["features"]["S000003"]["nMR"] == 1
+
+
+# ------------------------------------------------------------------ R4' --
+from uscm.guard import r4_resumption  # noqa: E402
+
+
+def seed_with_files(st, key, touched, last, nmr=2):
+    seed_feature(st, key, nmr, ["svc"], {"Alice": nmr})
+    st["features"][key]["files"] = {f: 1 for f in touched}
+    st["features"][key]["last"] = last
+
+
+def test_r4_triggers_on_resumption_retouch():
+    st = base_state()
+    seed_with_files(st, "S000001",
+                    ["svc/Risk.java", "svc/RiskService.java"], "2025-08-12")
+    v = r4_resumption(st["features"]["S000001"], "2025-08-26",
+                      ["svc/Risk.java", "svc/RiskService.java"])
+    assert v and v["kind"] == "r4" and v["gap_days"] == 14
+    assert v["files"] == 2 and v["overlap"] == 2
+
+
+def test_r4_normal_rhythm_not_flagged():
+    st = base_state()
+    seed_with_files(st, "S000001", ["svc/A.java"], "2025-08-12")
+    assert r4_resumption(st["features"]["S000001"], "2025-08-16",
+                         ["svc/A.java", "svc/B.java"]) is None
+
+
+def test_r4_extension_into_new_files_not_flagged():
+    st = base_state()
+    seed_with_files(st, "S000001", ["svc/A.java"], "2025-08-01")
+    # quiet 15 days, but the patch is mostly NEW files (1/4 re-touched)
+    assert r4_resumption(st["features"]["S000001"], "2025-08-16",
+                         ["svc/new1.java", "svc/new2.java", "svc/new3.java",
+                          "svc/A.java"]) is None
+
+
+def test_r4_empty_or_oversize_patch_not_flagged():
+    st = base_state()
+    seed_with_files(st, "S000001", ["svc/A.java"], "2025-08-01")
+    assert r4_resumption(st["features"]["S000001"], "2025-08-20", []) is None
+    six = [f"svc/F{i}.java" for i in range(6)]
+    seed_with_files(st, "S000002", six, "2025-08-01")
+    assert r4_resumption(st["features"]["S000002"], "2025-08-20", six) is None
+
+
+def test_r4_backward_compat_without_file_history():
+    st = base_state()
+    seed_feature(st, "S000001", 3, ["svc"], {"Alice": 3})   # no "files" key
+    assert r4_resumption(st["features"]["S000001"], "2026-01-01",
+                         ["svc/A.java", "svc/B.java"]) is None
+
+
+def test_r4_process_merge_flags_and_tracks_files():
+    st = base_state()
+    mg1, f1 = m("Merge (--story=000001)", ["src/main/java/svc/risk/A.java", "src/main/java/svc/risk/B.java"],
+                date="2025-01-05T10:00:00+00:00")
+    v1 = process_merge(st, CALIB, "r1", mg1, f1, "Alice", replay=True)
+    assert v1["r4"] is None                       # first landing
+    assert st["features"]["S000001"]["files"] == {"src/main/java/svc/risk/A.java": 1,
+                                                  "src/main/java/svc/risk/B.java": 1}
+    mg2, f2 = m("Merge (--story=000001)", ["src/main/java/svc/risk/A.java", "src/main/java/svc/risk/B.java"],
+                sha="cafe0001", date="2025-01-25T10:00:00+00:00")
+    v2 = process_merge(st, CALIB, "r1", mg2, f2, "Alice", replay=True)
+    assert v2["r4"] and v2["r4"]["gap_days"] == 20
+    r4_flags = [x for x in st["flags"] if x.get("kind") == "r4"]
+    assert len(r4_flags) == 1 and r4_flags[0]["story"] == "S000001"
+    assert st["features"]["S000001"]["files"]["src/main/java/svc/risk/A.java"] == 2

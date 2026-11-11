@@ -35,9 +35,14 @@ def monthly_report(ws, month: str | None = None) -> dict:
          "## Flags this month",
          ""]
     for f in in_month[-30:]:
-        L.append(f"- [{f['date']}] {f['repo']}#{f['sha'][:8]} P={f['P']} "
-                 f"tau={f['tau']} {f['story']} new_units="
-                 f"{','.join(f['new_units'][:3])} | {f['subject'][:60]}")
+        if f.get("kind") == "r4":
+            L.append(f"- [{f['date']}] {f['repo']}#{f['sha'][:8]} R4' rework "
+                     f"{f['story']} gap={f['gap_days']}d files={f['files']} "
+                     f"re-touch={f['overlap']} | {f['subject'][:60]}")
+        else:
+            L.append(f"- [{f['date']}] {f['repo']}#{f['sha'][:8]} P={f['P']} "
+                     f"tau={f['tau']} {f['story']} new_units="
+                     f"{','.join(f['new_units'][:3])} | {f['subject'][:60]}")
     L += ["", "## Calibration", ""]
     if calib:
         L.append(f"- mode: {calib.get('mode')} (tau={calib.get('tau')}, "
