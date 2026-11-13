@@ -4,9 +4,9 @@
 keeps technical debt and complexity within reason across continuous iteration by
 governing *where changes land*, which is where structural debt compounds.
 
-This is the software artifact of the USCM-CC change-cost model (paper: *"USCM-CC:
-a unified currency for change cost"*; see [THEORY.md](THEORY.md) for the
-code↔theory map). The statistical core is deterministic, auditable, and
+This is the software artifact of the USCM-CC change-cost model (paper: *"Complexity
+as Change Cost: A Unified Software Complexity Model and the Solvability Boundary
+of AI Coding Agents"*; see [THEORY.md](THEORY.md) for the code↔theory map). The statistical core is deterministic, auditable, and
 reproducible; it is exposed twice — as a CLI for humans and CI, and as an MCP
 server for AI coding agents.
 

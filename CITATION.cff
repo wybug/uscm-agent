@@ -19,3 +19,9 @@ keywords:
   - microservices
   - decision support
 license: MIT
+preferred-citation:
+  type: article
+  title: "Complexity as Change Cost: A Unified Software Complexity Model and the Solvability Boundary of AI Coding Agents"
+  authors:
+    - name: The uscm-agent authors
+  year: 2026
