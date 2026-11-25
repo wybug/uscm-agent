@@ -13,10 +13,10 @@ replay loop applies each merge only after judging it.
 from __future__ import annotations
 
 from . import state as st_mod
-from .features import (compile_patterns, feature_key, git, head_of, list_merges,
-                       merge_author, merge_files, merges_after)
+from .features import (compile_patterns, git, head_of, list_merges,
+                       merge_author, merge_files, merge_key, merges_after)
 from .model import ga_of, p_scatter
-from .modules import source_files, units_of
+from .modules import dw_profile, source_files, units_of
 from . import review as rv_mod
 
 
@@ -25,9 +25,16 @@ def evaluate_merge(st: dict, calib: dict, repo: str, merge: dict,
     """Pre-event R1' evaluation of one merge. Does not mutate state."""
     scheme = st["repos"][repo]["scheme"]
     patterns = compile_patterns(st["config"].get("feature_patterns"))
-    key = feature_key(merge["subject"], patterns)
+    keyed = merge_key(merge["subject"], files, patterns)
+    key = keyed["key"]
     out = {"date": merge["date"][:10], "repo": repo, "sha": merge["sha"],
            "subject": merge["subject"][:100], "story": key}
+    if keyed["key_source"] == "path":
+        out["key_source"] = "path"
+        if len(keyed["path_keys"]) > 1:
+            out["path_keys"] = dict(sorted(keyed["path_keys"].items()))
+    if scheme["type"] == "dw" and (prof := dw_profile(files))["scripts"]:
+        out["dw"] = prof
     if not key:
         return {**out, "verdict": "OK", "reason": "no-feature-key"}
     units = units_of(scheme, files)
@@ -47,6 +54,9 @@ def evaluate_merge(st: dict, calib: dict, repo: str, merge: dict,
     if scheme["type"] == "front" and calib["mode"] == "prior":
         out["warning"] = ("front-end repo under pooled prior: recalibrate "
                           "locally before trusting this threshold")
+    if scheme["type"] == "dw" and calib["mode"] == "prior":
+        out["warning"] = ("data-warehouse script repo under pooled prior: "
+                          "recalibrate locally before trusting this threshold")
     if not new_units:
         return {**out, "verdict": "PASS", "reason": "no-new-unit"}
     if P > calib["tau"]:
@@ -114,9 +124,10 @@ def apply_merge(st: dict, repo: str, merge: dict, key: str | None,
                 files: list[str], author: str | None) -> None:
     """Fold one merge into the feature table (call AFTER judging it)."""
     if key:
-        units = units_of(st["repos"][repo]["scheme"], files)
+        scheme = st["repos"][repo]["scheme"]
+        units = units_of(scheme, files)
         if units:
-            src = source_files(files)
+            src = source_files(files, scheme)
             st_mod.update_feature(st, key, repo, units, author,
                                   len(src), merge["date"][:10], files=src)
     st["processed"].setdefault(repo, []).append(merge["sha"])
@@ -126,9 +137,9 @@ def apply_merge(st: dict, repo: str, merge: dict, key: str | None,
 def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str],
                   author: str | None, replay: bool = False) -> dict:
     """Evaluate -> review tier -> maybe flag (R1' / R4') -> apply + record."""
+    scheme = st["repos"][repo]["scheme"]
     v = evaluate_merge(st, calib, repo, merge, files)
-    dec = rv_mod.review_decision(st, calib, v, files,
-                                 st["repos"][repo]["scheme"])
+    dec = rv_mod.review_decision(st, calib, v, files, scheme)
     v["review"] = dec
     if v["verdict"] == "FLAG":
         st["flags"].append({"date": v["date"], "repo": repo, "sha": merge["sha"],
@@ -141,7 +152,8 @@ def process_merge(st: dict, calib: dict, repo: str, merge: dict, files: list[str
     key = v.get("story")
     if key:
         f = st["features"].get(key)
-        r4 = r4_resumption(f, v["date"], source_files(files)) if f else None
+        r4 = (r4_resumption(f, v["date"], source_files(files, scheme))
+              if f else None)
         if r4:
             r4.update({"date": v["date"], "repo": repo, "sha": merge["sha"],
                        "story": key, "subject": v["subject"], "replay": replay})
@@ -188,6 +200,10 @@ def init_replay(ws, cfg: dict, repo_args: list[str] | None,
                                       unit_style=cfg.get("unit_style", "module"),
                                       skip_segments=cfg.get("skip_segments"))
         st["repos"][name]["scheme"] = scheme
+        if scheme["type"] == "dw":     # name-level attribution of the scripts
+            prof = dw_profile([f for m in merges for f in m["files"]])
+            st["repos"][name]["dw"] = {"scripts": prof["scripts"],
+                                       "attributed": prof["attributed"]}
         for m in merges:
             timeline.append((name, m))
         st["repos"][name]["head"] = head_of(path)
@@ -262,9 +278,17 @@ def check(ws, repo_arg: str, sha: str) -> dict:
 
 
 def summarize(st: dict, repos) -> dict:
-    return {"repos": {n: {"scheme": st["repos"][n]["scheme"]["type"],
-                          "merges": len(st["processed"].get(n, []))}
-                      for n in repos},
+    per_repo = {}
+    for n in repos:
+        rec = st["repos"][n]
+        per_repo[n] = {"scheme": rec["scheme"]["type"],
+                       "merges": len(st["processed"].get(n, []))}
+        if rec.get("dw"):
+            per_repo[n]["dw"] = rec["dw"]
+    log = (st.get("reviews") or {}).get("log") or []
+    return {"repos": per_repo,
             "features": len(st["features"]),
             "merges": st["stats"]["merges"],
+            "keyed": sum(1 for e in log if e.get("story")),
+            "keyed_by_path": sum(1 for e in log if e.get("key_source") == "path"),
             "flags": st["stats"]["flags"]}

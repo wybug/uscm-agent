@@ -28,10 +28,18 @@ def cmd_init(a) -> None:
         _j(s)
         return
     for name, r in s["repos"].items():
-        print(f"  {name:24s} scheme={r['scheme']:6s} merges={r['merges']}")
+        line = f"  {name:24s} scheme={r['scheme']:6s} merges={r['merges']}"
+        if r.get("dw"):
+            d = r["dw"]
+            line += (f"   scripts={d['scripts']} attributed-by-name="
+                     f"{d['attributed']} ({d['attributed'] / max(d['scripts'], 1):.0%})")
+        print(line)
+    keyed = f"{s['keyed']}"
+    if s["keyed_by_path"]:
+        keyed += f" ({s['keyed_by_path']} by merged paths)"
     print(f"features: {s['features']}   merges replayed: {s['merges']}   "
-          f"historical guardrail flags (R1'+R4'): {s['flags']}")
-    if s["merges"] and s["features"] < 0.3 * s["merges"]:
+          f"keyed: {keyed}   historical guardrail flags (R1'+R4'): {s['flags']}")
+    if s["merges"] and s["keyed"] < 0.3 * s["merges"]:
         print("hint: low feature-key coverage — run `uscm probe <repo>` to "
               "check the branch workflow and story dialect before trusting "
               "the replay")
@@ -71,6 +79,15 @@ def cmd_check(a) -> None:
     if "P" in v:
         print(f"  P(scatter)={v['P']}  tau={v['tau']}  nMR_prev={v['nMR_prev']}  "
               f"GA={v['ga']}  new_units={v['new_units']}")
+    if v.get("key_source") == "path":
+        more = f"  (also in this merge: {', '.join(v['path_keys'])})" \
+            if v.get("path_keys") else ""
+        print(f"  key from merged paths{more}")
+    if v.get("dw"):
+        d = v["dw"]
+        print(f"  dw: layers={'->'.join(d['layers']) or '-'}  "
+              f"scripts={d['scripts']} (attributed {d['attributed']})  "
+              f"deploy={d['deploy']} rollback={d['rollback']}")
     if v.get("warning"):
         print(f"  warning: {v['warning']}")
     if v["verdict"] == "FLAG":

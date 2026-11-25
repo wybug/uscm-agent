@@ -176,7 +176,7 @@ def test_degenerate_quantiles_keep_ladder_apart():
 
 def test_size_gate_local_p90_cannot_loosen_ceiling():
     """Machete repo: everyone writes 40-file MRs; the local P90 must not
-    neutralize the configured absolute ceiling (paper Table 9/10)."""
+    neutralize the configured absolute ceiling (paper Tables 14/15)."""
     st = base_state()
     st["reviews"]["file_counts"] = [10] * 22 + [40] * 18  # P50=10, P90=40
     thr = thresholds(st)

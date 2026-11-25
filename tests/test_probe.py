@@ -192,3 +192,34 @@ def test_probe_direct_flow(tmp_path):
     assert sum(r["merges"]["nested"].values()) == 0
     assert r["recommended"]["mainline"] is True
     assert "mainline = true" in toml_scaffold(r)
+
+
+def test_probe_dw_repo_reports_subject_units_and_path_keys(tmp_path):
+    """Script repository: dw scheme with its name-level attribution rate,
+    and landings whose key lives in the per-story deploy archive."""
+    from conftest import init_repo, land_merge
+    from uscm.probe import render
+    repo = init_repo(tmp_path / "dw")
+    ids = ("1000003", "1000013", "1000014")
+    for k, sid in enumerate(ids):
+        land_merge(repo, f"feature/{sid}",
+                   f"Merge branch 'feature/{sid}' into 'master'",
+                   [f"init/dw/dml/dataworks/sales_cdm/dws_sales_cust/{sid}.sql"],
+                   date=f"2025-03-0{k + 1}T10:00:00+00:00")
+    for k, sid in enumerate(ids):
+        land_merge(repo, f"branch_exp_{k}",
+                   "Merge branch 'branch_exp' into 'master'",
+                   [f"deploy/2025/Q1/2025040{k + 1}-{sid}/mc/"
+                    f"{sid}_ali_cloud_mc_ddl_abc.sql",
+                    f"init/dw/dml/dataworks/sales_cdm/dim_sales_cust/{sid}_x.sql"],
+                   date=f"2025-04-0{k + 1}T10:00:00+00:00")
+    r = probe(str(repo))
+    assert r["unit_style"]["scheme"] == "dw"
+    assert r["unit_style"]["recommendation"].startswith("dw")
+    assert r["unit_style"]["detail"] == {"dw_units": 1, "dw_attributed": 0.67}
+    assert r["merges"]["keyed"] == 3 and r["merges"]["path_keyable"] == 3
+    assert any('where = "path"' in w for w in r["warnings"])
+    assert "path keys: 3 unkeyed landings" in render(r)
+    sc = toml_scaffold(r)
+    assert sc.count("[[feature]]") == 2 and 'where = "path"' in sc
+    assert "unit_style" not in sc          # dw is detected, never configured

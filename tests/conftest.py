@@ -13,6 +13,26 @@ def git(repo: Path, *args, env=None):
     return r
 
 
+def land_merge(repo: Path, branch: str, subject: str, files: list[str],
+               author="Alice", date="2025-05-01T10:00:00+00:00"):
+    """Branch-commit then --no-ff merge with an arbitrary merge subject."""
+    env = {**os.environ,
+           "GIT_AUTHOR_NAME": author, "GIT_AUTHOR_EMAIL": "a@e.com",
+           "GIT_COMMITTER_NAME": "CI", "GIT_COMMITTER_EMAIL": "ci@e.com",
+           "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
+    git(repo, "checkout", "-q", "-b", branch, env=env)
+    for f in files:
+        p = repo / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text((p.read_text() if p.exists() else "") + "-- touch\n")
+        git(repo, "add", f, env=env)
+    git(repo, "commit", "-q", "-m", f"wip {branch}", env=env)
+    git(repo, "checkout", "-q", "main", env=env)
+    git(repo, "merge", "--no-ff", "-q", branch, "-m", subject, env=env)
+    git(repo, "branch", "-q", "-D", branch, env=env)
+    return git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
 def make_merge(repo: Path, story_num: int, files: list[str], author="Alice",
                date="2025-05-01T10:00:00+00:00"):
     """Branch-commit then --no-ff merge with a --story tagged subject."""

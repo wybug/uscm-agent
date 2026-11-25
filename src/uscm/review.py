@@ -49,7 +49,7 @@ def review_cfg(st: dict) -> dict:
 def thresholds(st: dict) -> dict:
     """Size-gate thresholds in force.
 
-    Two instruments, two epistemics (paper Table 9/10): landing count has no
+    Two instruments, two epistemics (paper Tables 14/15): landing count has no
     universal law, so its budget is a pure local P90; review size has an
     externally calibrated ceiling (detection collapses beyond ~400 lines),
     so the local P90 may only *tighten* the configured ceiling - never
@@ -85,7 +85,7 @@ def review_decision(st: dict, calib: dict, v: dict, files: list[str],
                     scheme: dict) -> dict:
     """Pre-event review tier for one merge. Reads state; never mutates."""
     from .advise import r3_anomaly      # lazy: advise pulls this module too
-    src = source_files(files)
+    src = source_files(files, scheme)
     units = units_of(scheme, files)
     thr = thresholds(st)
     out = {"n_files": len(src), "units_in_mr": len(units), "triggers": []}
@@ -235,6 +235,8 @@ def record(st: dict, dec: dict, v: dict) -> None:
         "story": v.get("story"), "tier": dec["tier"],
         "triggers": dec["triggers"], "n_files": dec["n_files"],
         "units_in_mr": dec["units_in_mr"]})
+    if v.get("key_source") == "path":        # keyed by merged paths, not subject
+        rev["log"][-1]["key_source"] = "path"
     rev.setdefault("file_counts", []).append(dec["n_files"])
 
 

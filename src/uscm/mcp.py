@@ -66,7 +66,12 @@ def serve() -> None:
         P(scatter), tau, new placement units, the guardrail comment text, and
         a ``review`` block - tier T0-T3 (T3 split-first / T2 deep+placement /
         T1 standard / T0 auto+sample), triggers, focus and required
-        artifacts (e.g. placement rationale for T2).
+        artifacts (e.g. placement rationale for T2). ``key_source="path"``
+        tells that the feature key came from the merged paths, not the
+        subject; on data-warehouse script repositories a ``dw`` block
+        reports the layers spanned, script counts and deployment /
+        rollback scripts. Read-only: the feature table advances only
+        through ``uscm init`` and ``uscm watch``.
         """
         from .guard import check, comment_text
         from .review import comment_text as review_comment

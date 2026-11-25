@@ -213,3 +213,95 @@ def test_r4_process_merge_flags_and_tracks_files():
     r4_flags = [x for x in st["flags"] if x.get("kind") == "r4"]
     assert len(r4_flags) == 1 and r4_flags[0]["story"] == "S000001"
     assert st["features"]["S000001"]["files"]["src/main/java/svc/risk/A.java"] == 2
+
+
+# ---------------------------------------------------- data-warehouse (dw) --
+
+def test_dw_layers_are_normative_subject_is_the_unit():
+    """One business subject across layers is one landing; a second subject
+    is the new unit R1' judges."""
+    st = base_state()
+    st["repos"]["r1"]["scheme"] = {"type": "dw"}
+    st["config"]["feature_patterns"] = [("Merge branch 'feature/(\\d{5,})'",
+                                         "S{0}")]
+    seed_feature(st, "S1000003", 6, ["sales.cust"], {"Alice": 6})
+    mg, files = m("Merge branch 'feature/1000003' into 'master'",
+                  ["init/dw/dml/dataworks/sales_cdm/ods_sales_cust/a.sql",
+                   "init/dw/dml/dataworks/sales_cdm/dwd_sales_cust/b.sql",
+                   "init/dw/dml/dataworks/sales_cdm/dws_sales_cust/c.sql"])
+    v = evaluate_merge(st, CALIB, "r1", mg, files)
+    assert v["units"] == ["sales.cust"] and v["verdict"] == "PASS"
+    assert v["dw"]["layers"] == ["ods", "dwd", "dws"]
+    assert v["warning"].startswith("data-warehouse script repo under pooled prior")
+    mg2, files2 = m("Merge branch 'feature/1000003' into 'master'",
+                    ["init/dw/dml/dataworks/sales_cdm/dws_sales_cust/c.sql",
+                     "init/dw/dml/dataworks/sales_cdm/dws_sales_trd/t.sql",
+                     "deploy/2026/Q1/20260113-1000003/mc/1000003_ali_cloud_mc_ddl_abc.sql"])
+    v2 = evaluate_merge(st, CALIB, "r1", mg2, files2)
+    assert v2["verdict"] == "FLAG" and v2["new_units"] == ["sales.trd"]
+    assert v2["dw"] == {"layers": ["dws"], "units": 2, "scripts": 3,
+                        "attributed": 2, "deploy": 1, "rollback": 0}
+    # scripts that name no table: counted for size, never a landing
+    mg3, files3 = m("Merge branch 'feature/1000003' into 'master'",
+                    ["deploy/2026/Q1/20260311-1000003/mc/1000003_ali_cloud_mc_ddl_abc.sql"])
+    v3 = evaluate_merge(st, CALIB, "r1", mg3, files3)
+    assert v3["verdict"] == "OK" and v3["reason"] == "no-source-units"
+    assert v3["dw"]["scripts"] == 1 and v3["dw"]["attributed"] == 0
+
+
+def test_dw_multi_story_merge_is_attributed_to_the_dominant_story():
+    st = base_state()
+    st["repos"]["r1"]["scheme"] = {"type": "dw"}
+    st["config"]["feature_patterns"] = [("/\\d{8}[-@](\\d{5,})/", "S{0}", "path")]
+    mg, files = m("Merge branch 'branch_exp' into 'master'",
+                  ["deploy/2023/Q3/20230816-1000005/dim_sales_cust_a.sql",
+                   "deploy/2023/Q3/20230816-1000006/dwd_sales_cust_b.sql",
+                   "deploy/2023/Q3/20230816-1000006/dws_sales_cust_c.sql"])
+    v = evaluate_merge(st, CALIB, "r1", mg, files)
+    assert v["story"] == "S1000006" and v["key_source"] == "path"
+    assert v["path_keys"] == {"S1000005": 1, "S1000006": 2}
+    assert v["reason"] == "feature-first-merge"
+
+
+def test_dw_repo_replay_and_check_keyed_by_deploy_archive(ws, tiny_repo):
+    """init -> check on a script repository: landings are keyed by the
+    merge subject or, when that is bare, by the per-story deploy archive."""
+    from conftest import land_merge
+    from uscm.guard import check
+    (ws / "uscm.toml").write_text(r"""
+[[feature]]
+regex = "Merge branch 'feature/(\\d{5,})'"
+tag = "S{0}"
+
+[[feature]]
+regex = "/\\d{8}[-@](\\d{5,})/"
+tag = "S{0}"
+where = "path"
+""")
+    gl = "Merge branch 'feature/1000003' into 'master'"
+    bare = "Merge branch 'branch_exp' into 'master'"
+    land_merge(tiny_repo, "feature/1000003", gl,
+               ["dw-script/ods/sales/cust/fs_ods_sales_cust_kafka2holo.sql",
+                "dw-script/cdm/dim/sales/cust/mc/dim_sales_cust_merch_info.sql"],
+               date="2025-03-05T10:00:00+00:00")
+    for i in range(5):          # bare subjects, keyed by the deploy archive
+        land_merge(tiny_repo, f"branch_exp_{i}", bare,
+                   [f"deploy/2025/Q2/2025040{i + 1}-1000003/mc/"
+                    f"1000003_ali_cloud_mc_dwd_sales_cust_{i}.sql"],
+                   date=f"2025-04-0{i + 1}T10:00:00+00:00")
+    s = init_replay(ws, st_mod.load_config(ws), [str(tiny_repo)], None)
+    assert s["repos"]["svc-demo"]["scheme"] == "dw"
+    assert s["repos"]["svc-demo"]["dw"] == {"scripts": 7, "attributed": 7}
+    st = st_mod.load_state(ws)
+    assert st["features"]["S1000003"]["nMR"] == 6       # 1 subject + 5 path keys
+    assert set(st["features"]["S1000003"]["units"]) == {"sales.cust"}
+    # a merge not yet folded in: a new business subject -> R1' FLAG, tier T2
+    sha = land_merge(tiny_repo, "branch_exp_9", bare,
+                     ["deploy/2026/Q1/20260113-1000003/mc/"
+                      "1000003_ali_cloud_mc_dws_sales_trd_trd_ddl_abc.sql"],
+                     date="2026-01-13T10:00:00+00:00")
+    v = check(ws, "svc-demo", sha)
+    assert v["verdict"] == "FLAG" and v["new_units"] == ["sales.trd"]
+    assert v["key_source"] == "path" and v["nMR_prev"] == 6
+    assert v["dw"]["deploy"] == 1 and v["dw"]["layers"] == ["dws"]
+    assert v["review"]["tier"] == "T2"

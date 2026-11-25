@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "The uscm-agent authors" }]
-dependencies = ["numpy>=1.24"]
+dependencies = ["numpy>=1.24", "tomli>=1.1.0; python_version < '3.11'"]
 keywords = [
   "technical-debt", "software-complexity", "modularity", "placement",
   "scatter", "microservices", "decision-support", "empirical-software-engineering",

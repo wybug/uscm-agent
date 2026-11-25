@@ -15,9 +15,14 @@ Optional ``uscm.toml`` alongside the workspace root:
                                  # DDD-layered monorepos)
     repos      = ["path/to/repo", "glob*/pattern"]
 
-    [[feature]]
+    [[feature]]                  # story-key dialect of the merge subjects
     regex = "--story=(\\d+)"
     tag   = "S{0}"
+
+    [[feature]]                  # ... or of the merged paths, when subjects
+    regex = "/\\d{8}[-@](\\d{5,})/"   # are bare (per-story deploy archives)
+    tag   = "S{0}"
+    where = "path"
 
     [review]                     # review-tier thresholds (size gate: local P90
     split_units     = 3          # only tightens split_files, never loosens it)
@@ -56,10 +61,14 @@ def load_config(ws: Path) -> dict:
     if not f.exists():
         return cfg
     try:
-        import tomllib
-        data = tomllib.loads(f.read_text())
-    except ModuleNotFoundError:  # pragma: no cover - py>=3.11 has tomllib
-        raise SystemExit("uscm.toml found but tomllib unavailable (need Python >= 3.11)")
+        import tomllib                        # Python >= 3.11
+    except ModuleNotFoundError:               # pragma: no cover - Python 3.10
+        try:
+            import tomli as tomllib           # dependency on Python < 3.11
+        except ModuleNotFoundError:
+            raise SystemExit("uscm.toml found but no TOML parser: install the "
+                             "'tomli' package or use Python >= 3.11")
+    data = tomllib.loads(f.read_text())
     cfg["since"] = data.get("since")
     cfg["tau"] = data.get("tau")
     cfg["mainline"] = data.get("mainline", True)
@@ -69,7 +78,8 @@ def load_config(ws: Path) -> dict:
     cfg["review"] = data.get("review", {})
     feats = data.get("feature", [])
     if feats:
-        cfg["feature_patterns"] = [(f["regex"], f["tag"]) for f in feats]
+        cfg["feature_patterns"] = [(f["regex"], f["tag"], f.get("where", "subject"))
+                                   for f in feats]
     return cfg
 
 

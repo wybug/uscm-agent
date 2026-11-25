@@ -19,7 +19,11 @@ Why this exists (instrument-first, ``no instrument, no model``):
 - **Unit style.** Module-style degeneracy (units = architecture layers) and
   pkg-style emptiness are pre-checked against the actual landing file sets;
   when the business capability lives in class-name prefixes, the ``camel``
-  vocabulary is measured and recommended.
+  vocabulary is measured and recommended. Data-warehouse script repositories
+  (``dw`` scheme) are reported with their name-level attribution rate.
+- **Path keys.** Landings whose subject carries no key but whose merged
+  paths do (per-story deploy archives) are counted, and the scaffold emits
+  the ``where = "path"`` pattern that keys them.
 """
 from __future__ import annotations
 
@@ -29,7 +33,7 @@ from collections import Counter, defaultdict
 
 from .features import list_merges
 from .modules import (STEREOTYPES, apply_unit_style, detect_scheme,
-                      is_source, is_test_module, unit_of)
+                      dw_profile, is_source, is_test_module, unit_of)
 
 # ----------------------------------------------------------------- parsing --
 
@@ -172,13 +176,13 @@ def classify(parsed: list[dict], dialect: re.Pattern | None,
 
 def _git(path: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", path, *args], capture_output=True,
-                          text=True)
+                          text=True, encoding="utf-8", errors="replace")
 
 
 def _diff_files(path: str, sha: str) -> list[str]:
-    p = _git(path, "-c", "diff.renames=false", "diff", "--name-only",
+    p = _git(path, "-c", "diff.renames=false", "diff", "--name-only", "-z",
              sha + "^", sha)
-    return [f for f in p.stdout.splitlines() if f.strip()]
+    return [f for f in p.stdout.split("\0") if f.strip()]
 
 
 def _head_line(path: str) -> str | None:
@@ -218,6 +222,16 @@ def unit_precheck(files_by_story: dict[str, list[str]],
     scheme = detect_scheme(all_files) if all_files else {"type": "flat2"}
     res = {"scheme": scheme["type"], "recommendation": None, "detail": {}}
     if not files_by_story:
+        return res
+    if scheme["type"] == "dw":
+        # units are business subjects by construction; what can fail is
+        # name-level attribution (scripts named without their table)
+        prof = dw_profile(all_files)
+        res["detail"] = {"dw_units": prof["units"],
+                         "dw_attributed": round(prof["attributed"]
+                                                / max(prof["scripts"], 1), 2)}
+        res["recommendation"] = ("dw (auto; business-subject units, "
+                                 "layers normative)")
         return res
     if scheme["type"] == "front":
         res["recommendation"] = "front (auto; page units)"
@@ -287,6 +301,14 @@ def probe(path: str, since: str | None = None) -> dict:
     landing = [m for m, r in zip(merges, rows) if r["role"] == "landing"]
     keyed = [m for m, r in zip(merges, rows)
              if r["role"] == "landing" and rx and rx.search(m["subject"])]
+    # landings whose subject is bare but whose paths carry the dialect
+    # (per-story deploy archives); the latest 500 are diffed
+    path_keyable = 0
+    bare = [m for m, r in zip(merges, rows)
+            if r["role"] == "landing" and not (rx and rx.search(m["subject"]))]
+    for m in bare[-500:]:
+        if rx and any(rx.search(f) for f in _diff_files(path, m["sha"])):
+            path_keyable += 1
     nested_shas = [m["sha"] for m, r in zip(merges, rows)
                    if r["role"] in ("review_iteration", "sync",
                                     "feature_internal")]
@@ -360,6 +382,10 @@ def probe(path: str, since: str | None = None) -> dict:
         warnings.append(f"dialect keys {len(keyed)}/{len(landing)} landings; "
                         "if ids live in message bodies, extract them from "
                         "branch names instead (feature_key reads subjects)")
+    if path_keyable >= max(3, 0.1 * len(landing)):
+        warnings.append(f"{path_keyable} unkeyed landings carry the dialect "
+                        "in their file paths: add the pattern with "
+                        'where = "path" (see the toml scaffold)')
     if nested_shas:
         if mainline_rec:
             warnings.append(f"{len(nested_shas)} nested merges (review/sync/"
@@ -386,6 +412,7 @@ def probe(path: str, since: str | None = None) -> dict:
                    "landing": roles.get("landing", 0),
                    "line_rollup": roles.get("line_rollup", 0),
                    "keyed": len(keyed), "keyed_on_head_fp": on_fp,
+                   "path_keyable": path_keyable,
                    "nested": {"review_iteration": roles.get("review_iteration", 0),
                               "sync": roles.get("sync", 0),
                               "feature_internal": roles.get("feature_internal", 0)}},
@@ -428,10 +455,17 @@ def render(r: dict) -> str:
     if not r["squash"]["covered"]:
         L.append(f"squash: NOT COVERED ({r['squash']['note']})")
     det = u["detail"]
+    if m.get("path_keyable") >= 3:
+        L.append(f"path keys: {m['path_keyable']} unkeyed landings carry the "
+                 "dialect in their paths (deploy archives) -> where = \"path\"")
     if det:
-        L.append(f"unit style: scheme={u['scheme']} "
-                 f"module_base_rate={det.get('module_scatter_base_rate')} "
-                 f"pkg_units={det.get('pkg_units')} -> {u['recommendation']}")
+        if u["scheme"] == "dw":
+            L.append(f"unit style: scheme=dw units={det['dw_units']} "
+                     f"attributed={det['dw_attributed']} -> {u['recommendation']}")
+        else:
+            L.append(f"unit style: scheme={u['scheme']} "
+                     f"module_base_rate={det.get('module_scatter_base_rate')} "
+                     f"pkg_units={det.get('pkg_units')} -> {u['recommendation']}")
         if det.get("camel_top"):
             L.append("  camel vocab: "
                      + ", ".join(f"{w_}x{c}" for w_, c in det["camel_top"][:8]))
@@ -462,13 +496,19 @@ def toml_scaffold(r: dict) -> str:
     else:
         lines += ["mainline = true", 'repos = ["<repo-path>"]']
     style = (rec["unit_style"] or "module").split(" ")[0]
-    if style != "module":
+    if style not in ("module", "dw"):        # dw is auto-detected, not set
         lines.append(f'unit_style = "{style}"')
-    if rec["regex"] and r.get("dialect_coverage", 1.0) >= 0.2:
+    esc = rec["regex"].replace(chr(92), chr(92) * 2) if rec["regex"] else None
+    if esc and r.get("dialect_coverage", 1.0) >= 0.2:
         lines += ["", "[[feature]]",
-                  f'regex = "{rec["regex"].replace(chr(92), chr(92) * 2)}"',
+                  f'regex = "{esc}"',
                   'tag = "S{0}"']
-    elif rec["regex"]:
+    elif esc and r.get("merges", {}).get("path_keyable", 0) < 3:
         lines += ["", "# dialect coverage too low to trust; no [[feature]] "
                   "emitted — merges stay statistics-only"]
+    if esc and r.get("merges", {}).get("path_keyable", 0) >= 3:
+        lines += ["", "[[feature]]",
+                  f'regex = "{esc}"',
+                  'tag = "S{0}"',
+                  'where = "path"   # unkeyed subjects whose paths carry the id']
     return "\n".join(lines) + "\n"
