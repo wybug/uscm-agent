@@ -1,8 +1,9 @@
 # THEORY.md — code ↔ paper map
 
 This artifact implements the **decision view** of the USCM-CC change-cost
-model (paper draft: §3.10 decision view; §9.4 item five (vi)–(vii) evidence;
-§1.4 two-layer calibration; model-v2 §2–3). Every quantity that enters the
+model (paper draft: §3.10 decision view; §9.4 item five (vi)–(ix) evidence;
+§4.9 data pipelines; §1.4 two-layer calibration; model-v2 §2–3). Every
+quantity that enters the
 model declares its instrument first ("no instrument, no model"); the table
 below maps each construct to the code that measures and uses it.
 
@@ -10,10 +11,10 @@ below maps each construct to the code that measures and uses it.
 
 | Paper construct | Instrument | Code |
 |---|---|---|
-| Feature F (story) | merge-commit subjects via configurable regex list | `features.py::feature_key` |
+| Feature F (story) | merge-commit subjects via configurable regex list; or, for bare subjects, the merged paths (`where = "path"`) | `features.py::merge_key` |
 | nMR(F) — merges on the feature | git merge history (first-parent diffs) | `features.py::list_merges/merge_files` |
 | KA / GA — author count / concentration | branch-commit authors; GA = 1 − H(p)/log KA | `model.py::ga_of` |
-| N₁ — placement units spanned | module schemes: `multi` (Maven dirs), `single` (package L1), `flat2` (first two dirs), `front` (distinct pages) | `modules.py` |
+| N₁ — placement units spanned | module schemes: `multi` (Maven dirs), `single` (package L1), `flat2` (first two dirs), `front` (distinct pages), `dw` (business subjects) | `modules.py` |
 | Φ — landing count | distinct placement units of F | `state.py::update_feature` |
 | Scatter regime | N₁ ≥ 3 modules; front-end: ≥ 2 distinct pages | `calibrate.py::feature_is_scattered` |
 | Placement-regime law (replaces Eq. 51) | logit P(scatter) = b₀ + b₁·log nMR + b₂·KA + b₃·GA | `model.py::p_scatter`, `priors/regime_pooled.json` |
@@ -78,6 +79,42 @@ than fabricates scatter. Stems starting with an acronym (`OSSKey…`) or
 lowercase (config files) land in no unit; a stem that *is* one capitalized
 word (e.g. `Application`) forms a singleton unit — rare, and visible as
 such in the unit table.
+
+**Data-warehouse script repositories (`dw` scheme).** A repository whose
+changed files are ≥ 80% SQL is a warehouse script repository. Its scripts
+are named after the table they build —
+`{engine}_{layer}_{domain}_{subject}_…` in the baseline, the DDL and the
+per-story deployment archive (`<id>@…@<layer>@<table>.sql`) alike — so the
+unit is read off the name: **`domain.subject`** (the fourth
+operationalization of the "crossing pages, not layers" principle: page →
+business package → class prefix → business subject). The ods → dwd → dws →
+ads direction is the warehouse's normative change path, so layers are
+reported in every verdict (`dw.layers`) but never counted. That is a
+normative choice, not an empirical one: in the validation repository two
+thirds of the landed merges touch a single layer, and layers as units
+would *not* be degenerate. Resolution is name-level only — the script's
+own name first, then `<layer>_<domain>_<subject>` or bare-layer
+directories — so layout changes do not matter and no blob is ever
+fetched. Operation / placeholder words (`ddl`, `dml`, `tmp`, `xxx`, …)
+are never a domain or a subject; a `@`-separated name is read from its
+last field (a layer word in a folder field is not the table's layer).
+Scripts that name no table (DDL without it, the platform's own databases)
+land in no unit: they count towards size, never invent a landing. A copy
+or synchronisation script lands in the subject of the table it copies —
+a requirement that copies many tables therefore spans many subjects, the
+multi-copy shape the paper names (§4.9, "The same thing seen from the
+merges"; the evidence is §9.4 item 5 (ix)). The workspace `unit_style` does not
+apply, and under the pooled prior the verdict carries the same
+recalibrate warning as front-end repositories.
+
+**Feature keys from merged paths.** Warehouse and platform repositories
+often land through personal branches, so the subject is bare while the
+merged paths carry the id (a deploy archive `…/{date}-{id}/`). A
+`[[feature]]` entry with `where = "path"` matches the merged paths
+instead. The subject wins when it carries a key; a merge bundling
+several stories' paths is attributed to the story with the most paths
+(one merge, one feature) and reports the others as `path_keys`. Both
+sources are part of the merge itself, so attribution stays pre-event.
 
 ## Review tiers (T0–T3)
 
@@ -157,7 +194,11 @@ scaffold (`--toml`). Recommendation rule: `mainline=true` only when every
 keyed landing is on HEAD's own first-parent chain (nested merges are then
 invisible by design); otherwise stage a clone with the emitted nested
 merges grafted parentless (`git replace --graft`) and run `mainline=false`
-— one walk, every landing exactly once, no double counting.
+— one walk, every landing exactly once, no double counting. Probe also
+counts landings whose subject is bare but whose paths carry the dialect
+and emits the `where = "path"` entry that keys them; a `dw` repository is
+reported with its scheme and its name-level attribution rate (there is no
+unit style to choose).
 
 ## Two-layer calibration (§1.4) and self-checks
 
@@ -182,7 +223,8 @@ merge before folding it into the feature table — so cross-repo features get
 exactly the pre-event information the paper's guardrail replay used. `watch`
 processes new merges per repository (batch order within a repo by date), the
 same approximation as the validated dry-run; `check` evaluates read-only
-against the current table (intended for merges not yet folded in).
+against the current table (intended for merges not yet folded in — it
+never advances the table; only `init` and `watch` do).
 
 ## R4' rework guardrail and shrunk Phi budgets (v0.5)
 
@@ -227,10 +269,16 @@ Two extensions validated on the recei-tech full-window evaluation
 - **Sources counted**: Java under `src/main/java`, Go (no `vendor/`, no
   `_test.go`), TS/TSX/Vue/JSX (no `node_modules/`, `dist/`, `.d.ts`,
   `.test./.spec.`). `.vue/.jsx` support is an extension beyond the original
-  pipeline (which was Java/Go/TS only).
+  pipeline (which was Java/Go/TS only). In `dw` repositories only
+  warehouse scripts count: SQL always, Python when named after its table;
+  service code in other languages inside a script repository is not a
+  placement landing.
 - **Feature-key dialects** are config (`uscm.toml` `[[feature]]`), defaults:
   `--story=N` / `story/N`, JIRA-like `[A-Z]+-\d+`, `TAPD N`. Merges without
-  a key update statistics but produce no feature-level verdicts.
+  a key update statistics but produce no feature-level verdicts. An entry
+  with `where = "path"` is matched against the merged paths instead of the
+  subject. Author attribution inside a merged branch breaks ties by name,
+  so results do not depend on the process hash seed.
 - **Mainline merges only** (default; config `mainline`). The unit of change
   is a first-parent merge onto the mainline — one merged request. Nested
   merges inside feature branches and direct pushes are invisible by design.

@@ -138,10 +138,45 @@ Then operate:
 
 Module schemes are auto-detected per repo: Maven multi-module (`multi`),
 single-tree Java packages (`single`), directory-prefix modules for Go/TS
-(`flat2`), and front-end repos (`front`), where **only distinct pages count as
+(`flat2`), front-end repos (`front`), and data-warehouse script
+repositories (`dw`). In `front` repos **only distinct pages count as
 placement units** — page→api→component layer crossings are normative
-structure, and scatter means *crossing pages*. Front-end repos under the
-pooled prior emit a warning: recalibrate locally first.
+structure, and scatter means *crossing pages*; in `dw` repos **only
+business subjects count** — scripts are named after the table they build
+(`dws_<domain>_<subject>_…` → `<domain>.<subject>`) and ods→dwd→dws→ads
+layer crossings are normative. Front-end and `dw` repos under the pooled
+prior emit a warning: recalibrate locally first.
+
+### Data-warehouse script repositories (`dw`)
+
+Detected when ≥ 80% of a repository's changed files are SQL. Units are read
+off names only — the script's own name first, then `<layer>_<domain>_<subject>`
+or bare layer directories — so layout changes do not matter and no blob is
+ever fetched. Scripts named without a table (DDL that does not name it, the
+platform's own databases) land in no unit: counted for size, never inventing
+a landing. Every verdict on a `dw` repo carries a `dw` block (layers spanned,
+scripts, deployment and rollback scripts).
+
+Merge subjects there are often bare (personal branches). When the repository
+archives deployments per story, key those merges from the merged paths —
+`uscm probe` counts how many landings this recovers and emits the scaffold:
+
+```toml
+[[feature]]
+regex = "Merge branch '(?:[^'/]*/)?(10\\d{5})"
+tag   = "S{0}"
+
+[[feature]]
+regex = "/\\d{8}[-@](10\\d{5})(?:/|$)"   # deploy/2026/Q1/20260113-1000001/…
+tag   = "S{0}"
+where = "path"
+```
+
+The subject wins when it carries a key; a merge bundling several stories'
+paths goes to the story with the most paths (the others stay visible in
+`path_keys`). See the [validation case](docs/validation-case-dw.md): 1,226
+mainline merges, 85% keyed (667 of them by path), local law log nMR +0.89 /
+GA −0.90 against the pooled +0.93 / −0.61, pooled prior cold AUC 0.668.
 
 ### MCP integration (for AI coding agents)
 
@@ -179,6 +214,7 @@ stay inside (R2′).
 | Out-of-sample system | 74 repos / 2,882 units: frozen-coef AUC 0.586 ≈ local refit 0.592; Java 0.60–0.85, front-end ~0.51 | held-out microservice system |
 | R1′ replay (decision validity) | τ=0.38, 164 flags / 10 months; flagged → heavily scattered (N₁≥6) 0.81 vs 0.43 (**lift 1.88**); Φ top-tercile lift 1.64 | per-merge replay, pre-event info only — *correlational* |
 | Out-of-sample DDD-layered monorepo | 402 mainline merges / 138 features; module-level label degenerate (94%) → business-package units; local law log nMR **+0.69** (direction replicates); replay precision 0.692 vs 0.371 (**lift 1.87**) | [validation case](docs/validation-case.md) |
+| Out-of-sample data-warehouse script repository | 1,226 mainline merges / 140 calibration units; business-subject units (`dw`); local law log nMR **+0.89**, GA **−0.90** (both directions replicate); pooled prior cold AUC 0.668 ≥ local refit 0.633; direction stable under five label counterfactuals | [validation case](docs/validation-case-dw.md) |
 | Φ universal scale law | rejected (R² median 0.09) → replaced by local quantile budgets | model v2 |
 
 **Boundary declaration** (ships with every deployment): this model provides
@@ -191,16 +227,18 @@ do not transfer across systems, directions and rankings do.
 
 ```
 src/uscm/model.py       regime law, logistic fit (IRLS), AUC, Phi bands
-src/uscm/modules.py     module-scheme detection & placement units
-src/uscm/features.py    git merge history -> feature units
+src/uscm/modules.py     module-scheme detection & placement units (incl. `dw`)
+src/uscm/features.py    git merge history -> feature units (subject / path keys)
 src/uscm/guard.py       R1': replay / watch / check
 src/uscm/calibrate.py   two-layer calibration + three self-checks
 src/uscm/advise.py      R2' narrowing, Phi budget, R3' anomaly
 src/uscm/review.py      review tiers T0-T3 + replay-log stats
 src/uscm/report.py      monthly markdown report
+src/uscm/probe.py       workflow pre-analysis (branch flow, dialect, units)
 src/uscm/synth.py       deterministic synthetic-system generator (demo/tests/CI)
 src/uscm/mcp.py         MCP server for coding agents
-docs/validation-case.md    anonymized out-of-sample validation record
+docs/validation-case.md      anonymized out-of-sample validation record
+docs/validation-case-dw.md   same for a data-warehouse script repository
 priors/regime_pooled.json   frozen pooled coefficients + provenance
 ```
 
